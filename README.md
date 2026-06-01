@@ -182,6 +182,17 @@ Or pass the YouTube/YouTube Music URL directly as an argument:
 uv run python process.py "https://music.youtube.com/watch?v=eZCWyFNV_ZM"
 ```
 
+### Launching the Web UI Player
+
+To host the dynamic Apple Music-style web app, stream audio, and load dynamic word timings:
+
+```bash
+uv run python server.py
+```
+
+Once running, navigate to the local portal in your browser:
+👉 **`http://localhost:8000`**
+
 ---
 
 ## 💻 Tested Hardware
