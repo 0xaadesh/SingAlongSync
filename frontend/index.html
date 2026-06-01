@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apple Music Like UI</title>
+    <!-- Import SF Pro Display Font -->
+    <link href="https://fonts.cdnfonts.com/css/sf-pro-display" rel="stylesheet">
+    <!-- Lucide Icons for clean iOS/macOS styled controls -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Dynamic Ambient Backdrop -->
+    <div class="ambient-backdrop" id="ambient-backdrop">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <div class="blob-overlay"></div>
+    </div>
+
+    <!-- Song Library Hub -->
+    <section class="library-container" id="library-view">
+        <header class="library-header">
+            <div class="library-logo">🎤 SingAlongSync</div>
+            <h1>Made For You</h1>
+            <p>Select a track to launch the word-by-word karaoke stage.</p>
+        </header>
+        <div class="song-grid" id="song-grid">
+            <!-- Dynamically populated song cards -->
+            <div class="lyrics-loading">
+                <div class="pulse-bar"></div>
+                <div class="pulse-bar"></div>
+                <div class="pulse-bar"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Player Container (initially hidden) -->
+    <main class="player-container hidden" id="player-view">
+        <!-- Left Side: Album Art & Media Controls -->
+        <section class="left-pane">
+            <button class="back-library-btn" id="back-library-btn" title="Back to Library">
+                <i data-lucide="chevron-left"></i> Library
+            </button>
+            <div class="album-card" id="album-card">
+                <img id="album-artwork" src="" alt="Album Artwork" crossorigin="anonymous">
+            </div>
+
+            <div class="track-metadata">
+                <div class="text-scroller">
+                    <h1 id="track-title" class="track-title">Loading...</h1>
+                </div>
+                <h2 id="track-artist" class="track-artist">Loading...</h2>
+                <h3 id="track-album" class="track-album"></h3>
+            </div>
+
+            <!-- Custom Controls -->
+            <div class="playback-controls">
+                <div class="timeline-container">
+                    <span id="current-time" class="time-label">0:00</span>
+                    <div class="scrubber-bar" id="scrubber-bar">
+                        <div class="scrubber-progress" id="scrubber-progress"></div>
+                        <div class="scrubber-thumb" id="scrubber-thumb"></div>
+                    </div>
+                    <span id="total-time" class="time-label">0:00</span>
+                </div>
+
+                <div class="button-row">
+                    <button class="ctrl-btn secondary" id="prev-btn" title="Previous">
+                        <i data-lucide="skip-back"></i>
+                    </button>
+                    <button class="ctrl-btn primary" id="play-btn" title="Play">
+                        <i data-lucide="play" class="icon-play"></i>
+                        <i data-lucide="pause" class="icon-pause" style="display: none;"></i>
+                    </button>
+                    <button class="ctrl-btn secondary" id="next-btn" title="Next">
+                        <i data-lucide="skip-forward"></i>
+                    </button>
+                </div>
+
+                <div class="volume-container">
+                    <button class="ctrl-btn volume-btn high" id="volume-toggle" title="Mute/Unmute">
+                        <i data-lucide="volume-x" class="vol-icon vol-mute" style="display: none;"></i>
+                        <i data-lucide="volume-1" class="vol-icon vol-low" style="display: none;"></i>
+                        <i data-lucide="volume-2" class="vol-icon vol-high"></i>
+                    </button>
+                    <div class="volume-bar" id="volume-bar">
+                        <div class="volume-progress" id="volume-progress"></div>
+                        <div class="volume-thumb" id="volume-thumb"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Side: Timed Lyrics Panel -->
+        <section class="right-pane">
+            <div class="lyrics-panel" id="lyrics-panel">
+                <div class="lyrics-scroller" id="lyrics-scroller">
+                    <!-- Synced lyrics lines will be injected dynamically -->
+                    <div class="lyrics-loading">
+                        <div class="pulse-bar"></div>
+                        <div class="pulse-bar"></div>
+                        <div class="pulse-bar"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Side Configurations Menu -->
+    <button class="settings-trigger-btn" id="settings-trigger" title="Settings">
+        <i data-lucide="sliders-horizontal"></i>
+    </button>
+    <aside class="settings-sidebar" id="settings-sidebar">
+        <div class="sidebar-header">
+            <h3>Player Settings</h3>
+            <button class="close-sidebar-btn" id="close-sidebar">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="sidebar-body">
+            <div class="setting-group">
+                <label for="lyric-size">Lyric Font Size</label>
+                <div class="size-controls">
+                    <button class="size-btn" id="font-decrease" title="Decrease Size">A-</button>
+                    <span id="font-size-indicator">100%</span>
+                    <button class="size-btn" id="font-increase" title="Increase Size">A+</button>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label for="translation-select">Translation</label>
+                <select id="translation-select">
+                    <option value="none">Original</option>
+                    <option value="es">Spanish (Mocked)</option>
+                    <option value="ja">Japanese (Mocked)</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label for="bg-speed">Ambient Drift Speed</label>
+                <select id="bg-speed">
+                    <option value="slow">Slow & Calm</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="fast">Energetic</option>
+                </select>
+            </div>
+
+            <div class="setting-group checkbox-group">
+                <input type="checkbox" id="interactive-seeking" checked>
+                <label for="interactive-seeking">Click Lyrics to Seek Track</label>
+            </div>
+
+            <div class="setting-group checkbox-group">
+                <input type="checkbox" id="word-by-word-toggle" checked>
+                <label for="word-by-word-toggle">Word-by-Word Highlighting</label>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Hidden Native Audio Source -->
+    <audio id="audio-player" preload="auto"></audio>
+
+    <script src="app.js"></script>
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

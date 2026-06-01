@@ -17,17 +17,28 @@ It automatically downloads YouTube audio, isolates vocal and instrumental tracks
 - **AI-Powered Vocal Separation:** Uses the **Demucs** (`htdemucs`) neural network model to split audio into pure vocals and pristine instrumental stems.
 - **Word-Level Audio Alignment:** Uses **WhisperX** to perform phonetic forced alignment, matching individual words to precise millisecond intervals.
 - **Premium Rich TUI:** Features gradient welcome titles, status spinners for heavy computations, interactive live progress tracking, colorized warnings, lyric previews, and detailed output tables showing file properties and sizes.
+- **Apple Music-Style Web UI:** Includes a premium, glassmorphism single-page web app built with dynamic ambient backdrops (extracting colors from cover art), smooth vertical center-scrolling lyrics, click-to-seek lyric interaction, and a dynamic song library view to switch between all processed tracks seamlessly.
 - **Intelligent Caching:** Instantly checks for previously processed tracks to avoid redundant downloads or heavy model executions.
 
 ---
 
-## 📺 Demonstration Video
+## 📺 Demonstration Videos
 
-Watch the demonstration video below to see **SingAlongSync** in action in the terminal:
+Watch the demonstration videos below to see **SingAlongSync**'s CLI processing and premium Web UI Player in action:
+
+### 🌐 1. Web UI Apple Music Karaoke Player
+Shows the dynamic song library, canvas color-extraction backdrops, and fluid word-by-word sweeping highlights:
+
+<video src="https://github.com/user-attachments/assets/1bc74b87-c34e-4b5f-b07e-c3dec88071e0" controls width="100%"></video>
+
+_Direct link: [Watch Web UI Demo directly in your browser](https://github.com/user-attachments/assets/1bc74b87-c34e-4b5f-b07e-c3dec88071e0)_
+
+### 💻 2. CLI / TUI Processing Stage
+Shows how you process songs in the terminal using the rich TUI:
 
 <video src="https://github.com/user-attachments/assets/317f310f-c52e-434c-95ad-9657a1131856" controls width="100%"></video>
 
-_If the video player above does not load or play, you can [watch the demonstration video directly in your browser](https://github.com/user-attachments/assets/317f310f-c52e-434c-95ad-9657a1131856)._
+_Direct link: [Watch TUI Demo directly in your browser](https://github.com/user-attachments/assets/317f310f-c52e-434c-95ad-9657a1131856)_
 
 ---
 

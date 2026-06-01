@@ -6,11 +6,13 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "demucs>=4.0.1",
+    "fastapi>=0.136.1",
     "requests>=2.28.1",
     "rich>=13.7.0",
     "torch>=2.5.1",
     "torchaudio>=2.5.1",
     "torchvision>=0.20.1",
+    "uvicorn>=0.46.0",
     "whisperx>=3.4.5",
     "yt-dlp>=2026.3.17",
 ]
