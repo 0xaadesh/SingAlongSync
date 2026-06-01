@@ -1,0 +1,29 @@
+# Python virtual environments & bytecode
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local processing outputs & caching
+downloads/
+separated/
+
+# Audio / Media files (precautionary)
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.webm
+*.json
+!pyproject.toml
+!uv.lock
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
