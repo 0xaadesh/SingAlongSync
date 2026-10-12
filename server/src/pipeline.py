@@ -13,7 +13,10 @@ from rich.align import Align
 
 from src.config import DOWNLOADS_DIR
 from src import settings as settings_store
+from src.align import build_karaoke, choose_alignment
 from src.enrich import enrich_metadata
+from src.romanize import romanize_lines
+from src.stems import encode_stems
 from src.translate import translate_song
 from src.status import read_status, write_json_atomic
 from src.lang import detect_lyrics_language
@@ -107,17 +110,21 @@ class KaraokePipeline:
         if not self.lrc_path.exists():
             raise LyricsNotFoundError("No synced lyrics found on LRCLIB for this track.")
 
+        # 3b. Translate + romanise (optional). Runs before alignment, which can use the
+        # romanised lines, and only needs the lyrics text.
+        if settings_store.translation_ready(settings_store.load()) and not self.translations_path.exists():
+            self.translate_step()
+
         # 4. Separate Vocals (Demucs)
         if not self.vocals_path.exists():
             self.separate_step()
+        # MP3 copies of the stems for the web player's karaoke mode
+        encode_stems(self.work_dir, log=lambda message: console.print(f"[dim]  {message}[/dim]"))
 
         # 5. Align (WhisperX)
         if not self.karaoke_path.exists():
             self.align_step()
 
-        # 6. Translate non-English lines (optional, never fails the song)
-        if settings_store.translation_ready(settings_store.load()) and not self.translations_path.exists():
-            self.translate_step()
 
         console.print(Panel(
             Align.center("[bold green]🌟 Pipeline Successfully Completed! 🌟[/bold green]\n[cyan]All audio stems and timing data have been built and saved.[/cyan]"),
@@ -273,23 +280,43 @@ class KaraokePipeline:
         with open(self.lrc_path, "r", encoding="utf-8") as f:
             lrc_raw = f.read()
 
-        segments = [
-            {"start": line["start"], "end": line["end"], "text": line["text"]}
-            for line in parse_lrc(lrc_raw) if line["text"].strip()
-        ]
+        lines = [line for line in parse_lrc(lrc_raw) if line["text"].strip()]
+        original_tokens = [line["text"].split() for line in lines]
 
-        # Detect script from the fetched lyrics to pick the right WhisperX align model
+        # Detect the script, then pick native or romanised alignment (Settings > Lyrics alignment)
         detection = detect_lyrics_language(strip_lrc_timestamps(lrc_raw))
-        language_code = detection["align_code"]
+        mode = settings_store.load().get("alignmentMode") or "auto"
+        use_romanized, language_code = choose_alignment(detection["script"], mode)
+
+        source_note = "lyrics as written"
+        align_tokens = original_tokens
+        if use_romanized:
+            ai_romanized = self._read_translations().get("romanized") or {}
+            align_tokens, stats = romanize_lines(original_tokens, ai_romanized)
+            source_note = (
+                f"romanised ({stats['ai']} lines from AI, {stats['rules']} by transliteration, "
+                f"{stats['latin']} already Latin)"
+            )
 
         console.print(Panel(
             f"[bold cyan]Detected Script:[/bold cyan] {detection['script'] or 'Unknown'}\n"
             f"[bold cyan]Likely Language:[/bold cyan] {detection['language']}\n"
+            f"[bold cyan]Alignment:[/bold cyan] {mode} mode, {source_note}\n"
             f"[bold cyan]WhisperX Align Code:[/bold cyan] {language_code}",
             border_style="cyan",
             title="[bold cyan]Language Detection[/bold cyan]"
         ))
-        self.save_status({"detected_script": detection["script"], "align_language_code": language_code})
+        self.save_status({
+            "detected_script": detection["script"],
+            "align_language_code": language_code,
+            "alignment_mode": mode,
+            "aligned_romanized": use_romanized,
+        })
+
+        segments = [
+            {"start": line["start"], "end": line["end"], "text": " ".join(tokens)}
+            for line, tokens in zip(lines, align_tokens)
+        ]
 
         with console.status("[bold blue]Loading WhisperX model and alignment weights...[/bold blue]", spinner="aesthetic") as status:
             audio = whisperx.load_audio(str(self.vocals_path))
@@ -299,25 +326,8 @@ class KaraokePipeline:
             status.update("[bold blue]Executing millisecond-level word alignment...[/bold blue]")
             result = whisperx.align(segments, model_a, metadata, audio, DEVICE)
 
-        karaoke_data = []
-        for segment in result["segments"]:
-            words = []
-            for word in segment.get("words", []):
-                start = word.get("start")
-                end = word.get("end")
-                if start is None or end is None: continue
-                words.append({
-                    "word": word["word"].strip(),
-                    "start": round(start, 3),
-                    "end": round(end, 3)
-                })
-
-            karaoke_data.append({
-                "line": segment["text"],
-                "start": round(segment["start"], 3),
-                "end": round(segment["end"], 3),
-                "words": words
-            })
+        # One entry per lyric line with the original words, even when romanised text was aligned
+        karaoke_data = build_karaoke(lines, original_tokens, align_tokens, result["segments"])
 
         with open(self.karaoke_path, "w", encoding="utf-8") as f:
             json.dump(karaoke_data, f, indent=2, ensure_ascii=False)
@@ -331,6 +341,12 @@ class KaraokePipeline:
             title="[bold green]Step 4 Complete[/bold green]"
         ))
 
+    def _read_translations(self):
+        try:
+            return json.loads(self.translations_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+
     def translate_step(self):
         settings = settings_store.load()
         self.save_status({"stage": "translating", "progress": None, "translation_error": None})
@@ -343,14 +359,14 @@ class KaraokePipeline:
                     f"[bold yellow]⚠ Translation failed: {e}[/bold yellow]\n"
                     "[dim]The song is ready without translations.[/dim]",
                     border_style="yellow",
-                    title="[bold yellow]Step 5: Translation Skipped[/bold yellow]"
+                    title="[bold yellow]Translation Skipped[/bold yellow]"
                 ))
                 return
         message = f"Translated {count} line(s) into English." if count else "Lyrics are already in English."
         console.print(Panel(
             f"[bold green]✓ {message}[/bold green]",
             border_style="green",
-            title="[bold green]Step 5: Translation Complete[/bold green]"
+            title="[bold green]Translation Complete[/bold green]"
         ))
 
     def _run_with_progress(self, cmd):

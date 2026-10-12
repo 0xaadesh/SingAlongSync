@@ -8,7 +8,7 @@ import threading
 
 from src import settings as settings_store
 from src.config import DOWNLOADS_DIR
-from src.translate import translate_song
+from src.translate import needs_translation, translate_song
 
 
 class TranslationQueue:
@@ -62,8 +62,9 @@ class TranslationQueue:
 
 
 def untranslated_songs():
+    """Songs with no translations, or with translations from before romanisation existed."""
     return [
         d.name
         for d in DOWNLOADS_DIR.iterdir()
-        if d.is_dir() and (d / "karaoke.json").exists() and not (d / "translations.json").exists()
+        if d.is_dir() and (d / "karaoke.json").exists() and needs_translation(d)
     ]

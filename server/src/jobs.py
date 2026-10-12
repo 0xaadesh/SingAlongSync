@@ -80,7 +80,8 @@ def read_progress(video_id, running, failed=False, translate=False):
     status = read_status(work_dir / "status.json")
     meta = read_metadata(work_dir) or {}
 
-    all_steps = STEPS + [TRANSLATE_STEP] if translate else STEPS
+    # Translation runs right after the lyrics are fetched
+    all_steps = STEPS[:2] + [TRANSLATE_STEP] + STEPS[2:] if translate else STEPS
     steps = []
     active_found = False
     for key, files, _stage in all_steps:

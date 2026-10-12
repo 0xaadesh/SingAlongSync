@@ -21,7 +21,19 @@ PROVIDERS = {
     "openrouter": "OpenRouter",
 }
 
-DEFAULTS = {"provider": None, "model": None, "translationEnabled": False, "apiKeys": {}}
+DEFAULTS = {
+    "provider": None,
+    "model": None,
+    "translationEnabled": False,
+    "apiKeys": {},
+    # yt-dlp cookies for when YouTube asks to confirm you're not a bot
+    "cookiesBrowser": None,
+    "cookiesFile": None,
+    # How lyrics are aligned: auto | native | romanized (see src/align.py)
+    "alignmentMode": "auto",
+}
+
+COOKIE_BROWSERS = ["firefox", "chrome", "edge", "brave", "opera", "vivaldi", "chromium", "safari"]
 
 _lock = threading.Lock()
 
@@ -63,4 +75,8 @@ def public(settings):
         "ready": translation_ready(settings),
         "keys": {p: mask(api_key(settings, p)) for p in PROVIDERS},
         "providers": [{"id": p, "name": name} for p, name in PROVIDERS.items()],
+        "cookiesBrowser": settings.get("cookiesBrowser"),
+        "cookiesFile": settings.get("cookiesFile"),
+        "cookieBrowsers": COOKIE_BROWSERS,
+        "alignmentMode": settings.get("alignmentMode") or "auto",
     }

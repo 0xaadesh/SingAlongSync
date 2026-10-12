@@ -1,9 +1,13 @@
+import os
 import shutil
 
 import requests
 from urllib.parse import urlparse, parse_qs
 
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
+
+from src import settings as settings_store
 
 # YouTube now requires solving JS challenges (via yt-dlp-ejs) to get working
 # download URLs; without a runtime, downloads fail with HTTP 403.
@@ -60,6 +64,28 @@ def track_metadata(info, video_id):
     }
 
 
+BOT_CHECK_HINT = (
+    "YouTube wants to confirm you're not a bot. In Settings > YouTube access, pick a browser "
+    "you're signed in to YouTube with (Firefox works best on Windows) or point to an exported "
+    "cookies.txt, then retry."
+)
+
+
+class YouTubeBotCheckError(RuntimeError):
+    pass
+
+
+def cookie_options(settings):
+    """yt-dlp options for signed-in requests, from Settings or server/.env (YTDLP_COOKIES_*)."""
+    browser = settings.get("cookiesBrowser") or os.getenv("YTDLP_COOKIES_FROM_BROWSER")
+    cookie_file = settings.get("cookiesFile") or os.getenv("YTDLP_COOKIES_FILE")
+    if cookie_file:
+        return {"cookiefile": cookie_file}
+    if browser:
+        return {"cookiesfrombrowser": (browser,)}
+    return {}
+
+
 def download_audio(url, work_dir, video_id, on_progress=None, on_metadata=None):
     """
     Download best audio as audio.mp3 (plus thumbnail) into work_dir and return track metadata.
@@ -91,14 +117,20 @@ def download_audio(url, work_dir, video_id, on_progress=None, on_metadata=None):
         "no_warnings": True,
         "noprogress": True,
         "js_runtimes": runtimes,
+        **cookie_options(settings_store.load()),
     }
 
-    with YoutubeDL(ydl_opts) as ydl:
-        # Resolve metadata first so callers can show the title while audio downloads.
-        info = ydl.extract_info(url, download=False)
-        metadata = track_metadata(info, video_id)
-        if on_metadata:
-            on_metadata(metadata)
-        ydl.process_ie_result(info, download=True)
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            # Resolve metadata first so callers can show the title while audio downloads.
+            info = ydl.extract_info(url, download=False)
+            metadata = track_metadata(info, video_id)
+            if on_metadata:
+                on_metadata(metadata)
+            ydl.process_ie_result(info, download=True)
+    except DownloadError as e:
+        if "confirm you" in str(e) and "not a bot" in str(e):
+            raise YouTubeBotCheckError(BOT_CHECK_HINT) from e
+        raise
 
     return metadata

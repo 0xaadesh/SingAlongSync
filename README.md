@@ -25,8 +25,10 @@ Give it a YouTube Music link (or search for a song) and it downloads the audio, 
 ### Web app
 - **Library** with **Songs, Albums, Artists and Genres** sections, detail pages for each album, artist and genre, and one search box that filters whichever page you're on.
 - **Full-screen player** with word-by-word lyric fill, a cascading scroll, instrumental-break dots, click-to-seek lines, manual lyric browsing, and a slowly turning backdrop built from the cover art.
-- **English translations** shown under translated lines, toggled from the player.
-- **Persistent mini player**, queue-aware next/previous (album, artist or whole library), keyboard shortcuts and OS media keys.
+- **Karaoke mode** plays the instrumental stem instead of the full mix, with an optional guide-vocals slider.
+- **English translations** and **pronunciation** (non-Latin-script lines in English letters) under each line, toggled from the player.
+- **Lyrics timing nudge** per song, for when lines feel early or late; saved on the server.
+- **Up next** queue view, a **Recently played** row, a persistent mini player, queue-aware next/previous (album, artist or whole library), keyboard shortcuts and OS media keys.
 - **Add songs** by searching YouTube Music or pasting a link, then watch each step live in the same dialog. Jobs keep running in the background, tracked from the navbar's downloads menu.
 - **Settings** for the AI translation provider, API key and model, plus translating songs already in your library.
 - **Delete songs** (and their files) from the library.
@@ -86,12 +88,12 @@ sequenceDiagram
     alt No synced lyrics
         CLI-->>Jobs: Fail early (skip GPU steps)
     else Lyrics found
-        CLI->>GPU: Separate vocals (Demucs)
-        CLI->>GPU: Align words (WhisperX, model picked by script)
         opt AI translation on
-            CLI->>LLM: One structured call: English for non-English lines
+            CLI->>LLM: One structured call: English + pronunciation for non-English lines
             LLM-->>CLI: translations.json
         end
+        CLI->>GPU: Separate vocals (Demucs)
+        CLI->>GPU: Align words (WhisperX: native script or romanised, per Settings)
         CLI-->>Jobs: karaoke.json written
     end
     Jobs-->>Web: Live step progress over SSE
@@ -110,9 +112,9 @@ The CLI runs the same pipeline (steps 11–19) directly in your terminal.
 
 1. **Download:** Fetches `audio.mp3` and writes `metadata.json`. Metadata is then enriched from YouTube Music (artists, album, year, explicit flag, `cover.jpg`) and iTunes (genre).
 2. **Fetch Lyrics:** Downloads the synced `.lrc` from LRCLIB and previews the first lines. If no synced lyrics exist, the run stops here.
-3. **Separate Vocals:** Demucs splits the audio into `vocals.wav` and `instrumental.wav`.
-4. **Align Lyrics:** Detects the lyrics' script, loads the matching WhisperX alignment model, and writes word timings to `karaoke.json`.
-5. **Translate** *(only when AI translation is on)*: Writes English for non-English lines to `translations.json`. A failed translation never fails the song.
+3. **Translate** *(only when AI translation is on)*: Writes English and Latin-letter pronunciation for non-English lines to `translations.json`, before the GPU steps. A failed translation never fails the song.
+4. **Separate Vocals:** Demucs splits the audio into `vocals.wav` and `instrumental.wav`, then FFmpeg encodes MP3 copies for karaoke mode.
+5. **Align Lyrics:** Detects the lyrics' script and aligns every word with WhisperX, writing `karaoke.json` (one entry per lyric line). Per **Settings > Lyrics alignment**: *Native script* aligns the lyrics as written with the script's own model; *Romanised* converts non-Latin lines to English letters (from the AI translation, or built-in transliteration) and aligns them with the English model; *Auto* (default) uses the native model for Hindi, Telugu and Malayalam and romanises scripts that have no model of their own (Punjabi, Tamil, Kannada, Bengali, Gujarati, Odia). The player always shows the original words.
 
 ---
 
@@ -158,6 +160,8 @@ downloads/<video_id>/
 ├── synced.lrc         # Line-synced lyrics from LRCLIB
 ├── vocals.wav         # Demucs vocal stem
 ├── instrumental.wav   # Demucs instrumental stem
+├── vocals.mp3         # Compressed stems streamed by karaoke mode
+├── instrumental.mp3
 ├── karaoke.json       # Word-level timings
 ├── translations.json  # English for non-English lines (only with AI translation)
 ├── status.json        # Pipeline stage and progress
@@ -213,9 +217,13 @@ English keyed by the line's index in `karaoke.json`. Lines already in English ar
   "provider": "openai",
   "model": "gpt-…",
   "createdAt": 1791812669.2,
+  "version": 2,
   "lines": {
     "0": "I would give my life for you, I would give my life",
     "3": "O beloved, O my beloved"
+  },
+  "romanized": {
+    "0": "Main vaari jaavan, main vaari jaavan"
   }
 }
 ```
@@ -303,7 +311,10 @@ Open 👉 **`http://localhost:3000`**
 
 - **Add a song:** Click **Add song**, then search YouTube Music or paste a link. Pasting a link into the library search works too.
 - **Browse:** Switch between Songs, Albums, Artists and Genres. The search box filters the current page; press `/` to focus it.
-- **Play:** Click a song to open the full-screen player. `Space` plays/pauses, `←`/`→` seek 5 seconds, `M` mutes, `Esc` closes the player.
+- **Play:** Click a song to open the full-screen player. `Space` plays/pauses, `←`/`→` seek 5 seconds, `M` mutes, `K` toggles karaoke mode, `[`/`]` shift the lyrics 0.1 s later/earlier, `Esc` closes the player.
+- **Player header:** the microphone opens karaoke mode and the guide-vocals slider; the language button holds translation, pronunciation and lyrics timing; the list button shows what plays next.
+
+If YouTube answers **"Sign in to confirm you're not a bot"** (it happens after many downloads from one IP), open **Settings > YouTube access** and pick a browser you're signed in to YouTube with (Firefox is most reliable on Windows; Chrome and Edge lock their cookies while open) or point to an exported `cookies.txt`, then press **Test**. The same can be set in `server/.env` with `YTDLP_COOKIES_FROM_BROWSER=firefox` or `YTDLP_COOKIES_FILE=C:\path\to\cookies.txt`.
 
 If the API runs somewhere else, set `NEXT_PUBLIC_API_URL` for the web app and add the web app's origin to `WEB_ORIGINS` in `server/.env`.
 
@@ -315,7 +326,7 @@ If the API runs somewhere else, set `NEXT_PUBLIC_API_URL` for the web app and ad
 4. Pick a model from the provider's live model list, or type any model ID. A fast, inexpensive model is plenty.
 5. Turn on **AI translation**.
 
-New songs then get a fifth **Translation** step, also when processed from the CLI. Use **Translate all** in Settings for songs already in your library, or **Translate** in the player for a single song. Translations appear under each line and can be hidden with the player's **Translation** button.
+New songs then get a fifth **Translation** step, also when processed from the CLI. Use **Translate all** in Settings for songs already in your library, or **Translate** in the player for a single song. Translations appear under each line. For lines in a non-Latin script (Devanagari, Gurmukhi, Malayalam…) the same call also returns the pronunciation in English letters, shown above the translation. Both can be switched off from the player's lyrics menu. Songs translated before pronunciation existed are refreshed by **Translate all**.
 
 ---
 

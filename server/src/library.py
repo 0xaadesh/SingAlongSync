@@ -66,6 +66,15 @@ def read_song(song_dir):
         "artwork": find_artwork(song_dir),
         "audio": f"/downloads/{song_dir.name}/audio.mp3",
         "addedAt": karaoke_path.stat().st_mtime,
+        # Compressed stems for karaoke mode (None until encoded)
+        "stems": {
+            "instrumental": f"/downloads/{song_dir.name}/instrumental.mp3",
+            "vocals": f"/downloads/{song_dir.name}/vocals.mp3",
+        }
+        if (song_dir / "instrumental.mp3").exists() and (song_dir / "vocals.mp3").exists()
+        else None,
+        # Seconds to shift lyrics by when they feel early or late (positive = lyrics earlier)
+        "lyricsOffset": meta.get("lyricsOffset") or 0,
     }
 
 
@@ -84,12 +93,16 @@ def get_song_detail(video_id):
         return None
     with open(song_dir / "karaoke.json", "r", encoding="utf-8") as f:
         song["lines"] = json.load(f)
-    # English for non-English lines, keyed by line index (absent until translated)
+    # English (and Latin-letter pronunciation) for non-English lines, keyed by line index.
+    # None until translated; romanizations stay None for files from before they existed.
     try:
         with open(song_dir / "translations.json", "r", encoding="utf-8") as f:
-            song["translations"] = json.load(f).get("lines", {})
+            data = json.load(f)
+        song["translations"] = data.get("lines", {})
+        song["romanizations"] = data.get("romanized")
     except (FileNotFoundError, json.JSONDecodeError):
         song["translations"] = None
+        song["romanizations"] = None
     return song
 
 

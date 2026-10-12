@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 import json
 import mimetypes
 import shutil
@@ -15,9 +16,12 @@ from pydantic import BaseModel
 
 from src import settings as settings_store
 from src.config import DOWNLOADS_DIR, WEB_ORIGINS
+from src.align import ALIGNMENT_MODES
 from src.enrich import backfill_async
+from src.stems import backfill_stems_async
+from src.status import write_json_atomic
 from src.jobs import JobManager
-from src.library import get_song_detail, is_valid_video_id, library_artists, list_songs
+from src.library import get_song_detail, is_valid_video_id, library_artists, list_songs, read_metadata
 from src.translate import list_models
 from src.translation_queue import TranslationQueue, untranslated_songs
 from src.ytmusic import AVATARS_DIR, download_missing_avatars, search_songs
@@ -41,6 +45,7 @@ translations = TranslationQueue()
 # Songs processed before the current metadata enrichment get it filled in, and
 # avatars known only by URL (older versions) get downloaded
 backfill_async()
+backfill_stems_async()
 threading.Thread(
     target=download_missing_avatars, kwargs={"log": lambda m: print(f"[avatars] {m}", flush=True)}, daemon=True
 ).start()
@@ -123,6 +128,22 @@ def delete_song(video_id: str):
     return {"ok": True}
 
 
+class OffsetUpdate(BaseModel):
+    offset: float
+
+
+@app.put("/api/songs/{video_id}/offset")
+def set_lyrics_offset(video_id: str, body: OffsetUpdate):
+    """Save how far to shift this song's lyrics (seconds, positive = earlier)."""
+    song_dir = DOWNLOADS_DIR / video_id
+    meta = read_metadata(song_dir) if is_valid_video_id(video_id) else None
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Song not found")
+    meta["lyricsOffset"] = round(max(-10.0, min(10.0, body.offset)), 2)
+    write_json_atomic(song_dir / "metadata.json", meta)
+    return {"lyricsOffset": meta["lyricsOffset"]}
+
+
 class JobRequest(BaseModel):
     url: str
 
@@ -188,6 +209,10 @@ class SettingsUpdate(BaseModel):
     translationEnabled: bool | None = None
     # Saved for `provider` (or the current provider when omitted). Empty string clears it.
     apiKey: str | None = None
+    # YouTube access: a browser to read cookies from, or a cookies.txt path. Empty string clears.
+    cookiesBrowser: str | None = None
+    cookiesFile: str | None = None
+    alignmentMode: str | None = None
 
 
 @app.get("/api/settings")
@@ -219,6 +244,20 @@ def update_settings(body: SettingsUpdate):
         settings["model"] = body.model.strip() or None
     if body.translationEnabled is not None:
         settings["translationEnabled"] = body.translationEnabled
+    if body.alignmentMode is not None:
+        if body.alignmentMode not in ALIGNMENT_MODES:
+            raise HTTPException(status_code=422, detail="Unknown alignment mode.")
+        settings["alignmentMode"] = body.alignmentMode
+    if body.cookiesBrowser is not None:
+        browser = body.cookiesBrowser.strip().lower() or None
+        if browser and browser not in settings_store.COOKIE_BROWSERS:
+            raise HTTPException(status_code=422, detail="Unsupported browser.")
+        settings["cookiesBrowser"] = browser
+    if body.cookiesFile is not None:
+        path = body.cookiesFile.strip().strip('"') or None
+        if path and not Path(path).is_file():
+            raise HTTPException(status_code=422, detail="No file found at that path.")
+        settings["cookiesFile"] = path
     settings_store.save(settings)
     return settings_store.public(settings)
 
@@ -271,3 +310,22 @@ def translate_one(video_id: str):
     (song_dir / "translations.json").unlink(missing_ok=True)
     translations.enqueue([video_id])
     return {"ok": True}
+
+
+@app.post("/api/youtube/check")
+def youtube_check():
+    """Try a metadata-only YouTube request with the saved cookie settings."""
+    from yt_dlp import YoutubeDL
+
+    from src.youtube import available_js_runtimes, cookie_options
+
+    opts = {"quiet": True, "no_warnings": True, "skip_download": True, "js_runtimes": available_js_runtimes()}
+    opts.update(cookie_options(settings_store.load()))
+    try:
+        with YoutubeDL(opts) as ydl:
+            # "Me at the zoo": tiny, permanent, and always public
+            ydl.extract_info("https://www.youtube.com/watch?v=jNQXAC9IVRw", download=False)
+    except Exception as e:
+        message = str(e).replace("ERROR: ", "").split("\n")[0][:300]
+        return {"ok": False, "message": message}
+    return {"ok": True, "message": "YouTube accepted the request."}
