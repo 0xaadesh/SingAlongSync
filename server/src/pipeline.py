@@ -31,8 +31,6 @@ console = Console()
 TQDM_PERCENT = re.compile(rb"(\d{1,3})%\|")
 
 
-class LyricsNotFoundError(Exception):
-    pass
 
 NO_LYRICS_MESSAGES = {
     "no_results": ("⚠ No lyrics found on LRCLIB.", "Step 2: No Lyrics"),
@@ -96,7 +94,7 @@ class KaraokePipeline:
             return
 
         # Clear leftovers from a previous failed or cancelled run
-        self.save_status({"stage": "starting", "progress": None, "error": None, "lyrics_found": None})
+        self.save_status({"stage": "starting", "progress": None, "error": None, "lyrics_found": None, "lyrics_error": None})
 
         # 2. Download Audio & Metadata
         if not self.audio_path.exists() or not self.metadata_path.exists():
@@ -106,13 +104,13 @@ class KaraokePipeline:
         if not self.lrc_path.exists():
             self.fetch_lyrics_step()
 
-        # Without synced lyrics there is nothing to align, so skip the heavy steps
-        if not self.lrc_path.exists():
-            raise LyricsNotFoundError("No synced lyrics found on LRCLIB for this track.")
+        # Without lyrics the song is still downloaded and separated (so it plays, and karaoke
+        # works); lyrics can be added later from the player, which re-runs alignment.
+        has_lyrics = self.lrc_path.exists()
 
         # 3b. Translate + romanise (optional). Runs before alignment, which can use the
         # romanised lines, and only needs the lyrics text.
-        if settings_store.translation_ready(settings_store.load()) and not self.translations_path.exists():
+        if has_lyrics and settings_store.translation_ready(settings_store.load()) and not self.translations_path.exists():
             self.translate_step()
 
         # 4. Separate Vocals (Demucs)
@@ -122,15 +120,22 @@ class KaraokePipeline:
         encode_stems(self.work_dir, log=lambda message: console.print(f"[dim]  {message}[/dim]"))
 
         # 5. Align (WhisperX)
-        if not self.karaoke_path.exists():
+        if has_lyrics and not self.karaoke_path.exists():
             self.align_step()
 
-
-        console.print(Panel(
-            Align.center("[bold green]🌟 Pipeline Successfully Completed! 🌟[/bold green]\n[cyan]All audio stems and timing data have been built and saved.[/cyan]"),
-            border_style="green",
-            title="[bold green]Success[/bold green]"
-        ))
+        self.save_status({"processed": True, "stage": "complete", "no_lyrics": not has_lyrics})
+        if has_lyrics:
+            console.print(Panel(
+                Align.center("[bold green]🌟 Pipeline Successfully Completed! 🌟[/bold green]\n[cyan]All audio stems and timing data have been built and saved.[/cyan]"),
+                border_style="green",
+                title="[bold green]Success[/bold green]"
+            ))
+        else:
+            console.print(Panel(
+                Align.center("[bold yellow]Saved without lyrics[/bold yellow]\n[cyan]The song plays (karaoke mode too). Add lyrics later from the player.[/cyan]"),
+                border_style="yellow",
+                title="[bold yellow]Done, No Lyrics[/bold yellow]"
+            ))
         self._print_summary_table()
 
     def download_step(self):
@@ -143,6 +148,7 @@ class KaraokePipeline:
                     self.work_dir,
                     self.video_id,
                     on_progress=self.report_progress,
+                    on_retry=lambda message: console.print(f"[yellow]  {message}[/yellow]"),
                     # Written before the audio arrives so the web UI can show the title early
                     on_metadata=self._write_metadata,
                 )
@@ -188,10 +194,11 @@ class KaraokePipeline:
                     meta["duration"],
                     log=lambda message: console.print(f"[dim]  {message}[/dim]"),
                 )
-            except LyricsServiceError:
-                # LRCLIB being down isn't "no lyrics"; fail with the real reason
-                self.save_status({"stage": "fetching_lyrics"})
-                raise
+            except LyricsServiceError as e:
+                # LRCLIB being down: carry on without lyrics; they can be fetched later
+                console.print(f"[bold yellow]⚠ {e} Continuing without lyrics.[/bold yellow]")
+                self.save_status({"lyrics_found": False, "lyrics_error": str(e)})
+                return
             except Exception as e:
                 console.print(f"[bold red]✗ Lyrics search failed: {e}[/bold red]")
                 self.save_status({"lyrics_found": False})
@@ -201,7 +208,7 @@ class KaraokePipeline:
             message, title = NO_LYRICS_MESSAGES[reason]
             console.print(Panel(
                 f"[bold yellow]{message}[/bold yellow]\n"
-                "[dim]Proceeding without lyric alignment steps.[/dim]",
+                "[dim]Continuing without lyrics; you can add them later from the player.[/dim]",
                 border_style="yellow",
                 title=f"[bold yellow]{title}[/bold yellow]"
             ))

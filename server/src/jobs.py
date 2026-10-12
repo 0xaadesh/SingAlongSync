@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 from src import settings as settings_store
 from src.config import CLI_PATH, DOWNLOADS_DIR, SERVER_ROOT
-from src.library import find_artwork, read_metadata
+from src.library import find_artwork, is_processed, read_metadata
 from src.status import read_status, write_json_atomic
 
 POLL_INTERVAL = 0.4
@@ -88,8 +88,10 @@ def read_progress(video_id, running, failed=False, translate=False):
         if all((work_dir / name).exists() for name in files):
             steps.append("done")
         elif key == "lyrics" and status.get("lyrics_found") is False:
+            # Not fatal: the song is still downloaded and separated
             steps.append("failed")
-            active_found = True
+        elif key in ("align", "translate") and status.get("lyrics_found") is False:
+            steps.append("skipped")
         elif key == "translate" and status.get("translation_error"):
             # Translation is best-effort: the song is still playable without it
             steps.append("failed")
@@ -108,6 +110,7 @@ def read_progress(video_id, running, failed=False, translate=False):
     return {
         "steps": [{"key": key, "status": s} for (key, _, _), s in zip(all_steps, steps)],
         "translationError": status.get("translation_error"),
+        "noLyrics": status.get("lyrics_found") is False,
         "stepProgress": progress,
         "title": meta.get("title"),
         "artist": meta.get("artist"),
@@ -168,7 +171,9 @@ def last_log_line(log_path):
 
 
 class JobManager:
-    def __init__(self):
+    def __init__(self, on_done=None):
+        # Called with the video id when a job finishes successfully (e.g. queue analysis)
+        self._on_done = on_done
         self._jobs: dict[str, Job] = {}
         self._queue: queue.Queue[str] = queue.Queue()
         self._lock = threading.Lock()
@@ -249,7 +254,7 @@ class JobManager:
         status_path = work_dir / "status.json"
         if status_path.exists():
             status = read_status(status_path)
-            for key in ("error", "lyrics_found", "progress", "translation_error"):
+            for key in ("error", "lyrics_found", "lyrics_error", "progress", "translation_error"):
                 status.pop(key, None)
             write_json_atomic(status_path, status)
 
@@ -281,7 +286,7 @@ class JobManager:
         with self._lock:
             if job.cancel_requested:
                 job.state = "cancelled"
-            elif job.process.returncode == 0 and (work_dir / "karaoke.json").exists():
+            elif job.process.returncode == 0 and is_processed(work_dir):
                 job.state = "done"
             else:
                 job.state = "failed"
@@ -293,6 +298,8 @@ class JobManager:
             self._bump()
         took = time.strftime("%M:%S", time.gmtime(job.finished_at - job.started_at))
         console_log(job.id, f"{job.state} in {took}" + (f": {job.error}" if job.error else ""))
+        if job.state == "done" and self._on_done:
+            self._on_done(job.id)
 
     def _refresh(self, job, running):
         progress = read_progress(job.id, running, translate=job.translate)

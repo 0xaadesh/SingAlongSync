@@ -134,11 +134,11 @@ def backfill_async():
     """Enrich songs processed before the current enrichment existed, in the background."""
 
     def run():
-        from src.library import read_metadata  # avoid an import cycle
+        from src.library import is_processed, read_metadata  # avoid an import cycle
 
         for song_dir in DOWNLOADS_DIR.iterdir():
             meta = read_metadata(song_dir) if song_dir.is_dir() else None
-            if not meta or meta.get("enriched", 0) >= ENRICH_VERSION or not (song_dir / "karaoke.json").exists():
+            if not meta or meta.get("enriched", 0) >= ENRICH_VERSION or not is_processed(song_dir):
                 continue
             log = lambda message, vid=song_dir.name: print(f"[enrich {vid}] {message}", flush=True)
             write_json_atomic(song_dir / "metadata.json", enrich_metadata(meta, song_dir, log=log))

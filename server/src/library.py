@@ -3,6 +3,8 @@ import json
 import re
 
 from src.config import DOWNLOADS_DIR
+from src.analysis.queue import read_analysis
+from src.status import read_status
 
 VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
 # "A, B feat. C" -> ["A", "B", "C"]; "&" only splits lists that also use commas,
@@ -44,10 +46,18 @@ def split_artists(artist):
     return [a.strip() for a in re.split(pattern, artist, flags=re.IGNORECASE) if a.strip()]
 
 
+def is_processed(song_dir):
+    """
+    Finished processing: aligned lyrics, or marked processed (songs saved without
+    lyrics). Unaffected while a song is being re-processed, e.g. after adding lyrics.
+    """
+    return (song_dir / "karaoke.json").exists() or read_status(song_dir / "status.json").get("processed") is True
+
+
 def read_song(song_dir):
     """Song summary, or None unless the bundle is fully processed."""
     karaoke_path = song_dir / "karaoke.json"
-    if not karaoke_path.exists():
+    if not is_processed(song_dir):
         return None
     meta = read_metadata(song_dir)
     if meta is None:
@@ -65,7 +75,9 @@ def read_song(song_dir):
         "thumbnail": meta.get("thumbnail"),
         "artwork": find_artwork(song_dir),
         "audio": f"/downloads/{song_dir.name}/audio.mp3",
-        "addedAt": karaoke_path.stat().st_mtime,
+        "addedAt": (karaoke_path if karaoke_path.exists() else song_dir / "metadata.json").stat().st_mtime,
+        "hasLyrics": karaoke_path.exists(),
+        "key": (read_analysis(song_dir) or {}).get("key"),
         # Compressed stems for karaoke mode (None until encoded)
         "stems": {
             "instrumental": f"/downloads/{song_dir.name}/instrumental.mp3",
@@ -91,8 +103,12 @@ def get_song_detail(video_id):
     song = read_song(song_dir)
     if song is None:
         return None
-    with open(song_dir / "karaoke.json", "r", encoding="utf-8") as f:
-        song["lines"] = json.load(f)
+    try:
+        with open(song_dir / "karaoke.json", "r", encoding="utf-8") as f:
+            song["lines"] = json.load(f)
+    except FileNotFoundError:
+        # Saved without lyrics; they can be added from the player
+        song["lines"] = []
     # English (and Latin-letter pronunciation) for non-English lines, keyed by line index.
     # None until translated; romanizations stay None for files from before they existed.
     try:
@@ -103,6 +119,8 @@ def get_song_detail(video_id):
     except (FileNotFoundError, json.JSONDecodeError):
         song["translations"] = None
         song["romanizations"] = None
+    # Key and chords (analysis.json), None until analysed
+    song["analysis"] = read_analysis(song_dir)
     return song
 
 

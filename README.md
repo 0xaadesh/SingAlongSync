@@ -13,11 +13,12 @@ Give it a YouTube Music link (or search for a song) and it downloads the audio, 
 ## ✨ Features
 
 ### Pipeline
-- **High-Quality Audio Downloading:** `yt-dlp` + `ffmpeg` extract the best audio track as a 320kbps MP3.
-- **Synced Lyrics Extraction:** Queries [LRCLIB](https://lrclib.net/) for time-synced lyrics (`.lrc`), matched by title, artist and duration. Songs without synced lyrics stop early instead of wasting GPU time.
+- **High-Quality Audio Downloading:** `yt-dlp` + `ffmpeg` extract the best audio track as a 320kbps MP3, retrying failed downloads up to 3 times (after 5, 15 and 30 seconds).
+- **Synced Lyrics Extraction:** Queries [LRCLIB](https://lrclib.net/) for time-synced lyrics (`.lrc`), matched by title, artist and duration. Songs without synced lyrics are still saved, and lyrics can be picked or uploaded later.
 - **AI-Powered Vocal Separation:** The **Demucs** (`htdemucs`) model splits audio into vocal and instrumental stems.
 - **Word-Level Alignment:** **WhisperX** forced alignment times every word. The alignment model is picked from the lyrics' script, so Hindi, Telugu, Malayalam and English songs each use a matching model.
 - **Rich Metadata:** **YouTube Music** (via `ytmusicapi`) supplies credited artists, album, year, explicit flag, a square album cover and artist avatars. Genres come from the **iTunes Search API**.
+- **Key & Chord Detection:** After processing, a background pass detects the song's key with **S-KEY** (Deezer, ICASSP 2025) and its chords with **BTC** (170-chord vocabulary) using **ChordMini**'s improved weights, both on the instrumental stem. Chords also settle major vs minor when the audio model is unsure. Beats, bar starts and BPM come from **beat_this** (CPJKU) on the full mix. Results go to `analysis.json`; model weights download on first use (pinned and checksum-verified) and the model code is vendored under `server/src/analysis/` with its MIT licenses.
 - **AI Translation (optional):** One structured-output call per song returns English for every non-English line, including romanised lyrics (Hindi written in English letters) and songs that mix languages line by line. Works with OpenAI, Google, Anthropic, Groq, xAI or OpenRouter using your own API key.
 - **Intelligent Caching:** Every step is skipped when its output already exists, so retries resume where they stopped.
 - **Rich TUI:** Gradient panels, spinners, live progress, lyric previews and an output summary table in the terminal.
@@ -25,6 +26,8 @@ Give it a YouTube Music link (or search for a song) and it downloads the audio, 
 ### Web app
 - **Library** with **Songs, Albums, Artists and Genres** sections, detail pages for each album, artist and genre, and one search box that filters whichever page you're on.
 - **Full-screen player** with word-by-word lyric fill, a cascading scroll, instrumental-break dots, click-to-seek lines, manual lyric browsing, and a slowly turning backdrop built from the cover art.
+- **Key and chords**: the player shows the song's key (with a spinner while it's being detected), the chord playing now and the next one, and chord names above the exact words where they change, like a lead sheet. Toggle chords from the lyrics menu.
+- **Beat view** (switch in the player header): a scrolling strip of beats grouped into bars with the chord changes, following playback (click a beat to jump), the lyric line being sung, and piano diagrams for the current and next chords. Beats and bars come from **beat_this** (CPJKU).
 - **Karaoke mode** plays the instrumental stem instead of the full mix, with an optional guide-vocals slider.
 - **English translations** and **pronunciation** (non-Latin-script lines in English letters) under each line, toggled from the player.
 - **Lyrics timing nudge** per song, for when lines feel early or late; saved on the server.
@@ -86,7 +89,7 @@ sequenceDiagram
     CLI->>Meta: Genre (iTunes)
     CLI->>Meta: Synced lyrics (LRCLIB, with retries)
     alt No synced lyrics
-        CLI-->>Jobs: Fail early (skip GPU steps)
+        CLI->>GPU: Separate vocals only (song saved without lyrics)
     else Lyrics found
         opt AI translation on
             CLI->>LLM: One structured call: English + pronunciation for non-English lines
@@ -111,7 +114,7 @@ The CLI runs the same pipeline (steps 11–19) directly in your terminal.
 ## 🛠️ The Pipeline Workflow
 
 1. **Download:** Fetches `audio.mp3` and writes `metadata.json`. Metadata is then enriched from YouTube Music (artists, album, year, explicit flag, `cover.jpg`) and iTunes (genre).
-2. **Fetch Lyrics:** Downloads the synced `.lrc` from LRCLIB and previews the first lines. If no synced lyrics exist, the run stops here.
+2. **Fetch Lyrics:** Downloads the synced `.lrc` from LRCLIB and previews the first lines. If none are found, the song is still downloaded and separated (it plays, karaoke mode included) and alignment is skipped; lyrics can be added later from the player.
 3. **Translate** *(only when AI translation is on)*: Writes English and Latin-letter pronunciation for non-English lines to `translations.json`, before the GPU steps. A failed translation never fails the song.
 4. **Separate Vocals:** Demucs splits the audio into `vocals.wav` and `instrumental.wav`, then FFmpeg encodes MP3 copies for karaoke mode.
 5. **Align Lyrics:** Detects the lyrics' script and aligns every word with WhisperX, writing `karaoke.json` (one entry per lyric line). Per **Settings > Lyrics alignment**: *Native script* aligns the lyrics as written with the script's own model; *Romanised* converts non-Latin lines to English letters (from the AI translation, or built-in transliteration) and aligns them with the English model; *Auto* (default) uses the native model for Hindi, Telugu and Malayalam and romanises scripts that have no model of their own (Punjabi, Tamil, Kannada, Bengali, Gujarati, Odia). The player always shows the original words.
@@ -164,6 +167,7 @@ downloads/<video_id>/
 ├── instrumental.mp3
 ├── karaoke.json       # Word-level timings
 ├── translations.json  # English for non-English lines (only with AI translation)
+├── analysis.json      # Detected key and timed chords
 ├── status.json        # Pipeline stage and progress
 └── job.log            # Full output of jobs started from the web app
 ```
@@ -310,6 +314,8 @@ bun run dev
 Open 👉 **`http://localhost:3000`**
 
 - **Add a song:** Click **Add song**, then search YouTube Music or paste a link. Pasting a link into the library search works too.
+- **Fix or add lyrics:** In the player, **Find lyrics** (songs without lyrics) or **Lyrics options > Find different lyrics** opens a picker: search LRCLIB and choose a result (durations matching the song are highlighted, with a preview), paste LRC text, or choose an `.lrc` file. The song is then re-aligned in the background, in about a minute.
+- **Add an album or playlist:** Paste a YouTube Music album or playlist link (`music.youtube.com/playlist?list=…`). Pick the tracks you want (songs already in your library are skipped) and they're queued and processed one at a time.
 - **Browse:** Switch between Songs, Albums, Artists and Genres. The search box filters the current page; press `/` to focus it.
 - **Play:** Click a song to open the full-screen player. `Space` plays/pauses, `←`/`→` seek 5 seconds, `M` mutes, `K` toggles karaoke mode, `[`/`]` shift the lyrics 0.1 s later/earlier, `Esc` closes the player.
 - **Player header:** the microphone opens karaoke mode and the guide-vocals slider; the language button holds translation, pronunciation and lyrics timing; the list button shows what plays next.

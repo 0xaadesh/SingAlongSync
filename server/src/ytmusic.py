@@ -174,3 +174,50 @@ def download_missing_avatars(log=print):
                 log(f"Avatar download failed for {entry['name']} ({e})")
             # Be gentle with Google's CDN
             time.sleep(1)
+
+
+def playlist_info(playlist_id):
+    """
+    Tracks of a YouTube Music album or playlist. Album links (list=OLAK5uy_…) are
+    resolved to the album itself, which has the artist, year and a proper cover.
+    """
+    yt = client()
+    if playlist_id.startswith("OLAK5uy_"):
+        album = yt.get_album(yt.get_album_browse_id(playlist_id))
+        album_artist = ", ".join(_artist_names(album.get("artists")))
+        raw_tracks = album.get("tracks", [])
+        info = {
+            "kind": "album",
+            "title": album.get("title"),
+            "artist": album_artist,
+            "year": album.get("year"),
+            "cover": resize(_largest(album.get("thumbnails")), 600),
+        }
+    else:
+        playlist = yt.get_playlist(playlist_id, limit=500)
+        author = playlist.get("author")
+        raw_tracks = playlist.get("tracks", [])
+        info = {
+            "kind": "playlist",
+            "title": playlist.get("title"),
+            "artist": author.get("name") if isinstance(author, dict) else author,
+            "year": playlist.get("year"),
+            "cover": resize(_largest(playlist.get("thumbnails")), 600),
+        }
+
+    tracks = []
+    for t in raw_tracks:
+        if not t.get("videoId"):
+            continue
+        names = _artist_names(t.get("artists")) or ([info["artist"]] if info["artist"] else [])
+        tracks.append({
+            "videoId": t["videoId"],
+            "title": t.get("title"),
+            "artist": ", ".join(names),
+            "duration": t.get("duration_seconds"),
+            "explicit": bool(t.get("isExplicit")),
+            "available": t.get("isAvailable", True) is not False,
+            "thumbnail": resize(_largest(t.get("thumbnails")), 120) or info["cover"],
+        })
+    info["tracks"] = tracks
+    return info

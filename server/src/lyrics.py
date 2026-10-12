@@ -115,3 +115,41 @@ def strip_lrc_timestamps(lrc_text: str) -> str:
         if cleaned:
             lines.append(cleaned)
     return "\n".join(lines)
+
+
+LRCLIB_GET_URL = "https://lrclib.net/api/get/{id}"
+
+
+def search_lrclib(params, log=print):
+    """Raw LRCLIB search for the manual picker: each result with a short preview."""
+    results = []
+    for r in _search(params, log):
+        synced = r.get("syncedLyrics")
+        preview = [line["text"] for line in parse_lrc(synced or "") if line["text"].strip()][:3]
+        results.append({
+            "id": r.get("id"),
+            "trackName": r.get("trackName"),
+            "artistName": r.get("artistName"),
+            "albumName": r.get("albumName"),
+            "duration": r.get("duration"),
+            "synced": bool(synced),
+            "instrumental": bool(r.get("instrumental")),
+            "preview": preview,
+        })
+    # Usable (synced) results first
+    results.sort(key=lambda r: not r["synced"])
+    return results
+
+
+def fetch_lrclib_synced(lrclib_id):
+    """Synced lyrics of one LRCLIB entry, or None if it has none."""
+    res = requests.get(LRCLIB_GET_URL.format(id=int(lrclib_id)), headers=LRCLIB_HEADERS, timeout=15)
+    if res.status_code == 404:
+        return None
+    res.raise_for_status()
+    return res.json().get("syncedLyrics")
+
+
+def validate_lrc(text):
+    """Number of timed lines in an LRC text (0 means it isn't usable)."""
+    return sum(1 for line in parse_lrc(text or "") if line["text"].strip())

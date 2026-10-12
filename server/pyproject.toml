@@ -5,9 +5,13 @@ description = "A CLI tool to obtain word-by-word Apple Music Sing-Along-like syn
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "beat-this",
     "demucs>=4.0.1",
+    "einops>=0.8.2",
     "fastapi>=0.136.1",
     "indic-transliteration>=2.3.82",
+    "librosa>=0.11.0",
+    "nnaudio==0.3.3",
     "pydantic-ai-slim[anthropic,google,groq,openai]>=2.55.0",
     "python-dotenv>=1.2.2",
     "requests>=2.28.1",
@@ -30,6 +34,7 @@ dependencies = [
 torch = { index = "pytorch-cu126" }
 torchaudio = { index = "pytorch-cu126" }
 torchvision = { index = "pytorch-cu126" }
+beat-this = { git = "https://github.com/CPJKU/beat_this", rev = "b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c" }
 
 [[tool.uv.index]]
 name = "pytorch-cu126"

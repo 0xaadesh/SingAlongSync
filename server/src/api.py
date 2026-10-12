@@ -17,15 +17,17 @@ from pydantic import BaseModel
 from src import settings as settings_store
 from src.config import DOWNLOADS_DIR, WEB_ORIGINS
 from src.align import ALIGNMENT_MODES
+from src.analysis.queue import AnalysisQueue
 from src.enrich import backfill_async
 from src.stems import backfill_stems_async
-from src.status import write_json_atomic
+from src.status import read_status, write_json_atomic
 from src.jobs import JobManager
-from src.library import get_song_detail, is_valid_video_id, library_artists, list_songs, read_metadata
+from src.library import get_song_detail, is_processed, is_valid_video_id, library_artists, list_songs, read_metadata
+from src.lyrics import LyricsServiceError, fetch_lrclib_synced, search_lrclib, validate_lrc
 from src.translate import list_models
 from src.translation_queue import TranslationQueue, untranslated_songs
-from src.ytmusic import AVATARS_DIR, download_missing_avatars, search_songs
-from src.youtube import extract_video_id, quick_metadata
+from src.ytmusic import AVATARS_DIR, download_missing_avatars, playlist_info, search_songs
+from src.youtube import extract_playlist_id, extract_video_id, quick_metadata
 
 # Windows' registry often lacks this, which would serve artwork as application/octet-stream
 mimetypes.add_type("image/webp", ".webp")
@@ -39,13 +41,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-jobs = JobManager()
+analysis = AnalysisQueue()
+# Finished songs get key and chord detection in the background
+jobs = JobManager(on_done=analysis.enqueue)
 translations = TranslationQueue()
 
 # Songs processed before the current metadata enrichment get it filled in, and
 # avatars known only by URL (older versions) get downloaded
 backfill_async()
 backfill_stems_async()
+analysis.backfill()
 threading.Thread(
     target=download_missing_avatars, kwargs={"log": lambda m: print(f"[avatars] {m}", flush=True)}, daemon=True
 ).start()
@@ -99,7 +104,7 @@ def search(q: str = ""):
     except Exception:
         raise HTTPException(status_code=502, detail="YouTube Music search is unavailable right now.")
     for song in results:
-        song["inLibrary"] = (DOWNLOADS_DIR / song["videoId"] / "karaoke.json").exists()
+        song["inLibrary"] = is_processed(DOWNLOADS_DIR / song["videoId"])
     return results
 
 
@@ -108,6 +113,10 @@ async def song_detail(video_id: str):
     song = get_song_detail(video_id) if is_valid_video_id(video_id) else None
     if song is None:
         raise HTTPException(status_code=404, detail="Song not found")
+    # pending while queued / running; failed if the last attempt errored
+    song["analysisStatus"] = (
+        "ready" if song["analysis"] else analysis.status(video_id) or ("failed" if analysis.error(video_id) else "none")
+    )
     return song
 
 
@@ -154,7 +163,7 @@ async def create_job(body: JobRequest):
     video_id = extract_video_id(url)
     if not video_id or not is_valid_video_id(video_id):
         raise HTTPException(status_code=422, detail="That doesn't look like a YouTube or YouTube Music link.")
-    if (DOWNLOADS_DIR / video_id / "karaoke.json").exists():
+    if is_processed(DOWNLOADS_DIR / video_id):
         return {"exists": True, "videoId": video_id}
     preview = await run_in_threadpool(quick_metadata, video_id)
     return {"exists": False, "videoId": video_id, "job": jobs.submit(video_id, url, preview)}
@@ -329,3 +338,105 @@ def youtube_check():
         message = str(e).replace("ERROR: ", "").split("\n")[0][:300]
         return {"ok": False, "message": message}
     return {"ok": True, "message": "YouTube accepted the request."}
+
+
+# ---------------------------------------------------------------------------
+# Albums and playlists: preview the tracks, then queue the chosen ones
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/playlists")
+def playlist_preview(url: str):
+    """Album / playlist details and tracks, each marked if already in the library or queued."""
+    playlist_id = extract_playlist_id(url)
+    if not playlist_id:
+        raise HTTPException(status_code=422, detail="That doesn't look like a YouTube Music album or playlist link.")
+    try:
+        info = playlist_info(playlist_id)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Couldn't load that album or playlist from YouTube Music.")
+    for track in info["tracks"]:
+        track["inLibrary"] = is_processed(DOWNLOADS_DIR / track["videoId"])
+        track["queued"] = jobs.is_active(track["videoId"])
+    return info
+
+
+class BatchTrack(BaseModel):
+    videoId: str
+    title: str | None = None
+    artist: str | None = None
+
+
+class BatchRequest(BaseModel):
+    tracks: list[BatchTrack]
+
+
+@app.post("/api/jobs/batch")
+def create_jobs(body: BatchRequest):
+    """Queue several songs (e.g. an album) at once; songs already in the library are skipped."""
+    if len(body.tracks) > 200:
+        raise HTTPException(status_code=422, detail="That's a lot of songs; add up to 200 at a time.")
+    queued, skipped = [], []
+    for track in body.tracks:
+        if not is_valid_video_id(track.videoId) or is_processed(DOWNLOADS_DIR / track.videoId):
+            skipped.append(track.videoId)
+            continue
+        preview = {"title": track.title, "artist": track.artist}
+        jobs.submit(track.videoId, f"https://music.youtube.com/watch?v={track.videoId}", preview)
+        queued.append(track.videoId)
+    return {"queued": queued, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
+# Lyrics: search LRCLIB manually, or supply an .lrc, then re-align
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/lyrics/search")
+def lyrics_search(q: str = "", track: str = "", artist: str = ""):
+    """LRCLIB search for the manual picker: free text (q) or track + artist."""
+    params = {"q": q.strip()} if q.strip() else {"track_name": track.strip(), "artist_name": artist.strip()}
+    if not any(params.values()):
+        return []
+    try:
+        return search_lrclib({k: v for k, v in params.items() if v}, log=lambda m: None)
+    except LyricsServiceError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+class LyricsUpdate(BaseModel):
+    lrclibId: int | None = None
+    lrc: str | None = None
+
+
+@app.post("/api/songs/{video_id}/lyrics")
+def set_lyrics(video_id: str, body: LyricsUpdate):
+    """Use an LRCLIB entry or supplied LRC for a song, then queue re-alignment."""
+    song_dir = DOWNLOADS_DIR / video_id
+    if not is_valid_video_id(video_id) or not (song_dir / "metadata.json").exists():
+        raise HTTPException(status_code=404, detail="Song not found")
+    if jobs.is_active(video_id):
+        raise HTTPException(status_code=409, detail="This song is still processing. Try again when it's done.")
+
+    if body.lrclibId is not None:
+        try:
+            lrc = fetch_lrclib_synced(body.lrclibId)
+        except requests.RequestException:
+            raise HTTPException(status_code=502, detail="Couldn't reach LRCLIB. Try again in a minute.")
+        if not lrc:
+            raise HTTPException(status_code=422, detail="That LRCLIB entry has no synced lyrics.")
+    else:
+        lrc = body.lrc or ""
+    if not validate_lrc(lrc):
+        raise HTTPException(status_code=422, detail="No timed lines found. Synced lyrics look like [01:23.45] a line of lyrics.")
+
+    (song_dir / "synced.lrc").write_text(lrc, encoding="utf-8")
+    # Old timings and translations belong to the previous lyrics
+    for name in ("karaoke.json", "translations.json"):
+        (song_dir / name).unlink(missing_ok=True)
+    status = read_status(song_dir / "status.json")
+    status.update({"lyrics_found": True, "no_lyrics": False, "lyrics_error": None, "processed": True})
+    write_json_atomic(song_dir / "status.json", status)
+
+    job = jobs.submit(video_id, f"https://music.youtube.com/watch?v={video_id}")
+    return {"job": job}

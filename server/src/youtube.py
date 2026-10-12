@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 
 import requests
 from urllib.parse import urlparse, parse_qs
@@ -47,6 +48,15 @@ def quick_metadata(video_id):
     return {"title": data.get("title"), "artist": artist or None}
 
 
+def extract_playlist_id(url):
+    """The list= id of a YouTube / YouTube Music album or playlist link."""
+    parsed = urlparse(url.strip())
+    if "youtube.com" not in parsed.netloc and "youtu.be" not in parsed.netloc:
+        return None
+    ids = parse_qs(parsed.query).get("list")
+    return ids[0] if ids else None
+
+
 def available_js_runtimes():
     return {name: {"path": path} for name in JS_RUNTIMES if (path := shutil.which(name))}
 
@@ -86,7 +96,11 @@ def cookie_options(settings):
     return {}
 
 
-def download_audio(url, work_dir, video_id, on_progress=None, on_metadata=None):
+# Waits before each retry of a failed download; each one longer than the last
+DOWNLOAD_RETRY_DELAYS = (5, 15, 30)
+
+
+def download_audio(url, work_dir, video_id, on_progress=None, on_metadata=None, on_retry=None):
     """
     Download best audio as audio.mp3 (plus thumbnail) into work_dir and return track metadata.
     on_metadata, if given, receives the metadata before the download starts.
@@ -120,17 +134,23 @@ def download_audio(url, work_dir, video_id, on_progress=None, on_metadata=None):
         **cookie_options(settings_store.load()),
     }
 
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            # Resolve metadata first so callers can show the title while audio downloads.
-            info = ydl.extract_info(url, download=False)
-            metadata = track_metadata(info, video_id)
-            if on_metadata:
-                on_metadata(metadata)
-            ydl.process_ie_result(info, download=True)
-    except DownloadError as e:
-        if "confirm you" in str(e) and "not a bot" in str(e):
-            raise YouTubeBotCheckError(BOT_CHECK_HINT) from e
-        raise
-
-    return metadata
+    for attempt, delay in enumerate((0, *DOWNLOAD_RETRY_DELAYS)):
+        if delay:
+            if on_retry:
+                on_retry(f"Download failed ({last_error}). Retry {attempt} of {len(DOWNLOAD_RETRY_DELAYS)} in {delay}s…")
+            time.sleep(delay)
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                # Resolve metadata first so callers can show the title while audio downloads.
+                info = ydl.extract_info(url, download=False)
+                metadata = track_metadata(info, video_id)
+                if on_metadata:
+                    on_metadata(metadata)
+                ydl.process_ie_result(info, download=True)
+            return metadata
+        except DownloadError as e:
+            last_error = str(e).replace("ERROR: ", "").split("\n")[0][:160]
+            if attempt == len(DOWNLOAD_RETRY_DELAYS):
+                if "confirm you" in str(e) and "not a bot" in str(e):
+                    raise YouTubeBotCheckError(BOT_CHECK_HINT) from e
+                raise

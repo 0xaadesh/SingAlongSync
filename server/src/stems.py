@@ -9,6 +9,7 @@ import subprocess
 import threading
 
 from src.config import DOWNLOADS_DIR
+from src.library import is_processed
 
 STEMS = ("instrumental", "vocals")
 
@@ -43,7 +44,7 @@ def backfill_stems_async():
 
     def run():
         for song_dir in DOWNLOADS_DIR.iterdir():
-            if song_dir.is_dir() and (song_dir / "karaoke.json").exists() and not stems_ready(song_dir):
+            if song_dir.is_dir() and is_processed(song_dir) and not stems_ready(song_dir):
                 encode_stems(song_dir, log=lambda m, vid=song_dir.name: print(f"[stems {vid}] {m}", flush=True))
 
     threading.Thread(target=run, daemon=True).start()
