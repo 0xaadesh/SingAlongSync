@@ -336,6 +336,42 @@ New songs then get a fifth **Translation** step, also when processed from the CL
 
 ---
 
+## 🙏 Credits & Acknowledgements
+
+SingAlongSync stands on the work of these projects and researchers. Thank you!
+
+### Key, chord and beat detection
+
+These models run in `server/src/analysis/`. Their model code is vendored (each folder keeps the original MIT `LICENSE` and a header naming the source commit); pretrained weights are downloaded from the authors' repositories on first use and are not redistributed here.
+
+| What | Project | Authors & paper | License |
+|---|---|---|---|
+| Musical key | [**S-KEY**](https://github.com/deezer/skey) (Deezer Research) | Yuexuan Kong, Gabriel Meseguer-Brocal, Vincent Lostanlen, Mathieu Lagrange, Romain Hennequin. *S-KEY: Self-supervised Learning of Major and Minor Keys from Audio.* ICASSP 2025. [doi:10.1109/ICASSP49660.2025.10890222](https://doi.org/10.1109/ICASSP49660.2025.10890222) | MIT (code); weights from the authors' repo |
+| Chords (model) | [**BTC**](https://github.com/jayg996/BTC-ISMIR19), Bi-directional Transformer for Chord Recognition | Jonggwon Park, Kyoyun Choi, Sungwook Jeon, Dokyun Kim, Jonghun Park. *A Bi-directional Transformer for Musical Chord Recognition.* ISMIR 2019. [arXiv:1907.02698](https://arxiv.org/abs/1907.02698) | MIT |
+| Chords (improved weights & implementation) | [**ChordMini**](https://github.com/ptnghia-j/ChordMini) | Nghia Phan, Rong Jin, Gang Liu, Xiao Dong. *Enhancing Automatic Chord Recognition via Pseudo-Labeling and Knowledge Distillation.* 2026. [arXiv:2602.19778](https://arxiv.org/abs/2602.19778) | MIT |
+| Beats & bars | [**Beat This!**](https://github.com/CPJKU/beat_this) (CPJKU, JKU Linz) | Francesco Foscarin, Jan Schlüter, Gerhard Widmer. *Beat this! Accurate beat tracking without DBN postprocessing.* ISMIR 2024. | MIT |
+
+The key decision rule (using detected chords to settle major vs minor) and the chord display are SingAlongSync's own; any mistakes in them are ours, not the models' authors'.
+
+### Audio, lyrics and metadata
+
+- [**WhisperX**](https://github.com/m-bain/whisperX): word-level forced alignment of lyrics to vocals
+- [**Demucs**](https://github.com/facebookresearch/demucs) (Meta AI): vocal / instrumental source separation (`htdemucs`)
+- [**yt-dlp**](https://github.com/yt-dlp/yt-dlp): audio download, with [yt-dlp-ejs](https://github.com/yt-dlp/ejs) for YouTube's JS challenge
+- [**ytmusicapi**](https://github.com/sigma67/ytmusicapi): YouTube Music search, credits, albums and artist avatars
+- [**LRCLIB**](https://lrclib.net/): community database of time-synced lyrics
+- [**iTunes Search API**](https://performance-partners.apple.com/search-api) (Apple): song genres
+- [**indic-transliteration**](https://github.com/indic-transliteration/indic_transliteration_py): rule-based romanisation for alignment
+- [**pydantic-ai**](https://github.com/pydantic/pydantic-ai): structured-output AI translation across providers
+- [**librosa**](https://github.com/librosa/librosa) and [**nnAudio**](https://github.com/KinWaiCheuk/nnAudio): audio features for the analysis models
+
+### Web app
+
+- [**Next.js**](https://nextjs.org/), [**Tailwind CSS**](https://tailwindcss.com/), [**Lucide**](https://lucide.dev/) icons, [**Geist**](https://vercel.com/font) font
+- AI provider logos from [**theSVG**](https://thesvg.org/); they are trademarks of their respective owners
+
+---
+
 ## 💻 Tested Hardware
 
 Tested with full **NVIDIA CUDA acceleration** for Demucs vocal separation and WhisperX alignment.
