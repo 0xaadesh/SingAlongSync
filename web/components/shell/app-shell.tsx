@@ -6,7 +6,7 @@ import { Suspense, useEffect, type ReactNode } from "react";
 import { fetchSong } from "@/lib/api";
 import { onJobFinished } from "@/lib/jobs";
 import { useLibrary } from "@/lib/library";
-import { player, usePlayer } from "@/lib/player";
+import { player, playerStore, usePlayer } from "@/lib/player";
 import { toast } from "@/lib/toast";
 import { openAddDialog, trackedJobStore } from "@/lib/ui";
 import { AddSongDialog } from "@/components/library/add-song-dialog";
@@ -14,6 +14,7 @@ import { DownloadsMenu } from "@/components/library/downloads-menu";
 import { SearchField } from "@/components/library/search-field";
 import { MiniPlayer } from "@/components/player/mini-player";
 import { PlayerHost } from "@/components/player/player-host";
+import { LyricsDialog } from "@/components/player/lyrics-dialog";
 import { PlayerSheet } from "@/components/player/player-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Toaster } from "@/components/ui/toaster";
@@ -31,6 +32,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     () =>
       onJobFinished(({ job }) => {
         // The add dialog is already showing this job's result.
+        // Lyrics were added or replaced for the song that's open: show the new timings
+        if (job.state === "done" && playerStore.get().song?.videoId === job.id) player.refreshDetail().catch(() => {});
         if (trackedJobStore.get() === job.id) return;
         if (job.state === "done") {
           toast({
@@ -99,6 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <PlayerSheet />
       <AddSongDialog />
       <ConfirmDialog />
+      <LyricsDialog />
       <Toaster />
     </>
   );

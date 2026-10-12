@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Play, RotateCw, X } from "lucide-react";
+import { Check, Minus, Play, RotateCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { assetUrl, fetchSong, imageCors, type Job, type StepKey, type StepStatus } from "@/lib/api";
 import { formatTime } from "@/lib/format";
@@ -29,7 +29,7 @@ export function displaySteps(job: Job): { key: StepKey; status: StepStatus }[] {
 export function jobFraction(job: Job) {
   if (job.state === "done") return 1;
   const steps = displaySteps(job);
-  const done = steps.filter((s) => s.status === "done").length;
+  const done = steps.filter((s) => s.status === "done" || s.status === "skipped").length;
   const active = steps.some((s) => s.status === "active") ? (job.stepProgress ?? 0) : 0;
   return (done + active) / steps.length;
 }
@@ -53,7 +53,7 @@ export function statusLine(job: Job) {
     case "queued":
       return "Waiting in queue";
     case "done":
-      return "Ready to sing";
+      return job.noLyrics ? "Ready, no lyrics found" : "Ready to sing";
     case "cancelled":
       return "Cancelled";
     case "failed":
@@ -182,11 +182,15 @@ export function JobSteps({ job }: { job: Job }) {
         const label = STEP_LABELS[step.key];
         const isLast = i === steps.length - 1;
         const detail =
-          step.status !== "failed"
-            ? label.detail
-            : step.key === "translate"
-              ? `Skipped: ${job.translationError ?? "translation failed"}. The song is still ready.`
-              : (job.error ?? "This step failed");
+          step.status === "skipped"
+            ? "Skipped: no synced lyrics"
+            : step.status !== "failed"
+              ? label.detail
+              : step.key === "translate"
+                ? `Skipped: ${job.translationError ?? "translation failed"}. The song is still ready.`
+                : step.key === "lyrics" && job.noLyrics
+                  ? "No synced lyrics found. The song is saved anyway; add lyrics later from the player."
+                  : (job.error ?? "This step failed");
         return (
           <li
             key={step.key}
@@ -208,7 +212,11 @@ export function JobSteps({ job }: { job: Job }) {
               <div className="flex items-baseline justify-between gap-3">
                 <p
                   className={`text-[15px] font-medium transition-colors duration-150 ${
-                    step.status === "pending" ? "text-subtle" : step.status === "failed" ? "text-danger" : "text-fg"
+                    step.status === "pending" || step.status === "skipped"
+                      ? "text-subtle"
+                      : step.status === "failed"
+                        ? "text-danger"
+                        : "text-fg"
                   }`}
                 >
                   {step.status === "active" ? label.long : label.title}
@@ -290,6 +298,14 @@ export function StepNode({ status, progress }: { status: StepStatus; progress: n
       {/* Failed */}
       <span data-hidden={status !== "failed"} className="grid size-6 place-items-center rounded-full bg-danger text-white">
         <X size={14} strokeWidth={3} />
+      </span>
+
+      {/* Skipped (e.g. alignment when there are no lyrics) */}
+      <span
+        data-hidden={status !== "skipped"}
+        className="grid size-6 place-items-center rounded-full text-subtle shadow-[inset_0_0_0_1.5px_rgb(255_255_255/0.16)]"
+      >
+        <Minus size={12} strokeWidth={3} />
       </span>
     </span>
   );

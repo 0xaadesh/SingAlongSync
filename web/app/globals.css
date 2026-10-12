@@ -30,6 +30,9 @@ html {
   background: var(--color-bg);
   color: var(--color-fg);
   -webkit-tap-highlight-color: transparent;
+  /* The whole UI renders at 90% (like browser zoom 90%): denser, and the player fits
+     shorter windows. zoom scales px and rem alike, unlike changing the root font size. */
+  zoom: 0.9;
 }
 
 body {
@@ -548,11 +551,149 @@ body {
   display: none;
 }
 
+/* Each line stacks original, pronunciation and translation; order is swappable */
+.lyric-line {
+  display: flex;
+  flex-direction: column;
+}
+
+.lyric-original {
+  display: block;
+}
+
 .lyric-romanized {
+  display: block;
+  padding-top: 0.25em;
+  font-size: 0.56em;
   color: rgb(255 255 255 / 0.75);
   font-style: italic;
 }
 
+/* "Romanised first": pronunciation becomes the big line, the script moves underneath */
+.lyrics-viewport[data-swap="true"][data-romanizations="true"] .lyric-line:has(.lyric-romanized) .lyric-romanized {
+  order: -1;
+  padding-top: 0;
+  font-size: 1em;
+  font-style: normal;
+  color: inherit;
+}
+
+.lyrics-viewport[data-swap="true"][data-romanizations="true"] .lyric-line:has(.lyric-romanized) .lyric-original {
+  padding-top: 0.25em;
+  font-size: 0.56em;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.75);
+}
+
 .lyrics-viewport[data-romanizations="false"] .lyric-romanized {
   display: none;
+}
+
+/* ---------- Chords over lyrics (lead-sheet style) ---------- */
+
+.lyric-chord {
+  position: absolute;
+  bottom: 100%;
+  left: 0.05em;
+  display: none;
+  margin-bottom: 0.1em;
+  font-size: 0.42em;
+  font-weight: 700;
+  font-style: normal;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  color: rgb(255 210 120);
+}
+
+/* Shown above the main line only: the original script, or the pronunciation when swapped */
+.lyrics-viewport[data-chords="true"] .lyric-original .lyric-chord {
+  display: block;
+}
+
+/* Chords sit in the leading above each row of the main line, so wrapped rows get their
+   own chord space instead of colliding with the row above. */
+.lyrics-viewport[data-chords="true"] .lyric-line[data-has-chords] {
+  padding-top: 0.1em;
+}
+
+.lyrics-viewport[data-chords="true"] .lyric-line[data-has-chords] .lyric-original {
+  line-height: 2.1;
+}
+
+.lyrics-viewport[data-chords="true"][data-swap="true"][data-romanizations="true"] .lyric-line[data-has-chords]:has(.lyric-romanized) .lyric-original {
+  line-height: 1.35;
+}
+
+.lyrics-viewport[data-chords="true"][data-swap="true"][data-romanizations="true"] .lyric-line[data-has-chords] .lyric-romanized {
+  line-height: 2.1;
+}
+
+.lyrics-viewport[data-chords="true"][data-swap="true"][data-romanizations="true"] .lyric-line:has(.lyric-romanized) .lyric-original .lyric-chord {
+  display: none;
+}
+
+.lyrics-viewport[data-chords="true"][data-swap="true"][data-romanizations="true"] .lyric-romanized .lyric-chord {
+  display: block;
+  /* The romanised line is full size when swapped, so match the main chord size */
+  font-size: 0.42em;
+}
+
+/* ---------- Beat view ---------- */
+
+.beat-viewport {
+  mask-image: linear-gradient(to right, transparent 0, #000 4%, #000 92%, transparent 100%);
+}
+
+.beat-strip {
+  transition: transform 350ms var(--ease-out);
+  will-change: transform;
+}
+
+.beat-cell {
+  display: flex;
+  align-items: center;
+  width: 64px;
+  height: 64px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(255 255 255 / 0.92);
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .beat-cell:hover {
+    background: rgb(255 255 255 / 0.16);
+  }
+}
+
+.beat-cell[data-played="true"] {
+  opacity: 0.45;
+}
+
+.beat-cell[data-current] {
+  background: #fff;
+  color: #000;
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  .beat-cell {
+    width: 54px;
+    height: 54px;
+    font-size: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beat-strip {
+    transition: none;
+  }
 }

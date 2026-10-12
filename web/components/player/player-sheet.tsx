@@ -1,17 +1,35 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { useEffect, useRef, type PointerEvent } from "react";
-import { artworkUrl, imageCors } from "@/lib/api";
+import { artworkUrl, imageCors, type SongDetail } from "@/lib/api";
 import { player, usePlayer } from "@/lib/player";
 import { useStore } from "@/lib/store";
-import { showRomanizationsStore, showTranslationsStore } from "@/lib/ui";
+import {
+  openLyricsDialog,
+  romanizedFirstStore,
+  initPlayerView,
+  playerViewStore,
+  setPlayerView,
+  showChordsStore,
+  showRomanizationsStore,
+  showTranslationsStore,
+  type PlayerView,
+} from "@/lib/ui";
 import { Marquee } from "@/components/ui/marquee";
 import { Ambient } from "./ambient";
 import { TransportControls, VolumeControl } from "./controls";
 import { Lyrics } from "./lyrics";
 import { Progress } from "./progress";
 import { KaraokeMenu, LyricsMenu, QueueMenu } from "./player-menus";
+import { SongFacts } from "./song-facts";
+import { BeatView } from "./beat-view";
+import { Tabs } from "@/components/ui/tabs";
+
+const VIEW_TABS = [
+  { id: "lyrics", label: "Lyrics" },
+  { id: "beats", label: "Beats" },
+];
 
 const DISMISS_DISTANCE = 140;
 const DISMISS_VELOCITY = 0.11; // px per ms: a quick flick is enough
@@ -21,6 +39,10 @@ export function PlayerSheet() {
   const { song, detail, detailError, playing, sheetOpen, lyricsOffset } = usePlayer();
   const showTranslations = useStore(showTranslationsStore);
   const showRomanizations = useStore(showRomanizationsStore);
+  const romanizedFirst = useStore(romanizedFirstStore);
+  const showChords = useStore(showChordsStore);
+  const view = useStore(playerViewStore);
+  useEffect(() => initPlayerView(), []);
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const drag = useRef<{ id: number; startY: number; startTime: number; dy: number } | null>(null);
@@ -98,7 +120,19 @@ export function PlayerSheet() {
           >
             <ChevronDown size={22} strokeWidth={2} />
           </button>
-          <div aria-hidden className="mx-auto h-1.5 w-10 rounded-full bg-white/25 lg:hidden" />
+          {/* Grab handle; the view switch takes its place once a song is loaded */}
+          {!detail && <div aria-hidden className="mx-auto h-1.5 w-10 rounded-full bg-white/25 lg:hidden" />}
+          {detail && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+              <Tabs
+                tabs={VIEW_TABS}
+                value={view}
+                onChange={(id) => setPlayerView(id as PlayerView)}
+                label="Player view"
+                idPrefix="view"
+              />
+            </div>
+          )}
           {detail ? (
             <div className="flex items-center gap-2">
               <KaraokeMenu detail={detail} />
@@ -141,6 +175,7 @@ export function PlayerSheet() {
                 <div className="min-w-0">
                   <h2 className="truncate text-lg leading-tight font-semibold lg:text-xl">{song.title}</h2>
                   <Marquee key={song.videoId} className="text-[15px] text-white/60 lg:text-base">{song.artist}</Marquee>
+                  {detail && detail.videoId === song.videoId && <SongFacts detail={detail} />}
                 </div>
               </div>
 
@@ -149,13 +184,31 @@ export function PlayerSheet() {
                 <div className="mt-3">
                   <TransportControls />
                 </div>
-                <div className="mt-5 hidden lg:block">
+                {/* Shown at every width; centred and narrower on small screens */}
+                <div className="mx-auto mt-4 max-w-xs lg:mx-0 lg:mt-5 lg:max-w-none">
                   <VolumeControl />
                 </div>
               </div>
 
               <div className="relative min-h-0 [grid-area:lyrics] lg:-my-10">
-                {detail ? (
+                {detail && view === "beats" ? (
+                  <div id="view-panel-beats" role="tabpanel" aria-labelledby="view-tab-beats" className="h-full">
+                    {detail.analysis?.beats?.length ? (
+                      <BeatView
+                        analysis={detail.analysis}
+                        lines={detail.lines}
+                        romanizations={showRomanizations ? detail.romanizations : null}
+                        active={sheetOpen}
+                      />
+                    ) : (
+                      <LyricsMessage>
+                        {detail.analysisStatus === "pending"
+                          ? "Finding the beat and chords…"
+                          : "The beat view isn't ready for this song yet."}
+                      </LyricsMessage>
+                    )}
+                  </div>
+                ) : detail ? (
                   detail.lines.length ? (
                     <Lyrics
                       lines={detail.lines}
@@ -164,10 +217,13 @@ export function PlayerSheet() {
                       showTranslations={showTranslations}
                       romanizations={detail.romanizations}
                       showRomanizations={showRomanizations}
+                      romanizedFirst={romanizedFirst}
+                      chords={detail.analysis?.chords}
+                      showChords={showChords}
                       offset={lyricsOffset}
                     />
                   ) : (
-                    <LyricsMessage>No synced lyrics for this song.</LyricsMessage>
+                    <NoLyrics detail={detail} />
                   )
                 ) : detailError ? (
                   <LyricsMessage>{detailError}</LyricsMessage>
@@ -179,6 +235,34 @@ export function PlayerSheet() {
           )}
         </main>
       </div>
+    </div>
+  );
+}
+
+/** Songs saved without lyrics: offer to find them. */
+function NoLyrics({ detail }: { detail: SongDetail }) {
+  return (
+    <div className="flex h-full flex-col items-start justify-center gap-4">
+      <p className="text-2xl font-semibold text-white/60">No lyrics for this song yet.</p>
+      <p className="max-w-sm text-[15px] text-white/50 text-pretty">
+        Search LRCLIB for synced lyrics, or use your own .lrc file. The song re-syncs in about a minute.
+      </p>
+      <button
+        type="button"
+        onClick={() =>
+          openLyricsDialog({
+            videoId: detail.videoId,
+            title: detail.title,
+            artist: detail.artist,
+            artists: detail.artists,
+            duration: detail.duration,
+          })
+        }
+        className="pressable flex h-11 items-center gap-2 rounded-full bg-white px-5 text-[15px] font-semibold text-black hover:bg-white/85"
+      >
+        <Search size={17} strokeWidth={2.25} />
+        Find lyrics
+      </button>
     </div>
   );
 }

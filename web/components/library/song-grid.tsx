@@ -69,6 +69,11 @@ const SongCard = memo(function SongCard({
           <span className="absolute right-2.5 bottom-2.5 grid size-10 place-items-center rounded-full bg-accent text-white opacity-0 shadow-[0_4px_12px_rgb(0_0_0/0.35)] transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
             <Play size={18} fill="currentColor" strokeWidth={0} className="translate-x-px" />
           </span>
+          {!song.hasLyrics && (
+            <span className="absolute top-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur-md">
+              No lyrics
+            </span>
+          )}
           {state !== "idle" && (
             <span className="absolute bottom-2.5 left-2.5 flex h-7 items-center gap-[3px] rounded-full bg-black/55 px-2.5 backdrop-blur-md">
               <span className="eq flex h-3 items-end gap-[3px]" data-paused={state === "paused"}>
@@ -139,7 +144,7 @@ export function RecentlyPlayed({ songs }: { songs: Song[] }) {
       <h2 id="recent-heading" className="mb-3 text-[15px] font-semibold text-muted">
         Recently played
       </h2>
-      <ul className="-mx-5 flex snap-x gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul className="-mx-5 flex snap-x gap-4 overflow-x-auto scroll-px-5 px-5 pb-2 sm:-mx-8 sm:scroll-px-8 sm:px-8 lg:-mx-12 lg:scroll-px-12 lg:px-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {songs.map((song, i) => (
           <li key={song.videoId} className="w-[132px] shrink-0 snap-start sm:w-[148px]">
             <SongCard

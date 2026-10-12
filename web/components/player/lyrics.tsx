@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef } from "react";
-import type { KaraokeLine, Word } from "@/lib/api";
+import type { ChordSegment, KaraokeLine, Word } from "@/lib/api";
 import { player } from "@/lib/player";
 
 type Item =
@@ -14,6 +14,9 @@ type Item =
       romanized: Word[] | null;
       /** Timing for every fillable element in DOM order: original words, then romanised. */
       parts: Word[];
+      /** Chord name to show above each word (lead-sheet style), if any. */
+      chordMarks: (string | undefined)[];
+      romanizedChordMarks: (string | undefined)[];
       lineIndex: number;
     }
   | { kind: "gap"; start: number; end: number };
@@ -62,7 +65,41 @@ function romanizedTokens(text: string, words: Word[]): Word[] {
   });
 }
 
-function buildItems(lines: KaraokeLine[], romanizations?: Record<string, string> | null): Item[] {
+/**
+ * Lead-sheet placement: each chord that starts during the line goes above the word being
+ * sung at that moment, and the line's first word shows the chord already sounding.
+ * Chords that start in an instrumental break are left to the live chord readout.
+ */
+function chordMarks(words: Word[], chords: ChordSegment[], from: number, to: number) {
+  const marks: (string | undefined)[] = new Array(words.length).fill(undefined);
+  if (!chords.length || !words.length) return marks;
+  let sounding: string | undefined;
+  for (const c of chords) {
+    if (c.start <= from + 0.05) {
+      if (c.end > from) sounding = c.chord;
+      continue;
+    }
+    if (c.start >= to) break;
+    let k = 0;
+    for (let i = 0; i < words.length; i++) if (words[i].start <= c.start + 0.15) k = i;
+    marks[k] = c.chord;
+  }
+  if (!marks[0] && sounding) marks[0] = sounding;
+  // Only show changes: drop a mark that repeats the previous one in this line
+  let previous: string | undefined;
+  return marks.map((m) => {
+    if (!m) return m;
+    const keep = m !== previous;
+    previous = m;
+    return keep ? m : undefined;
+  });
+}
+
+function buildItems(
+  lines: KaraokeLine[],
+  romanizations?: Record<string, string> | null,
+  chords: ChordSegment[] = [],
+): Item[] {
   const items: Item[] = [];
   lines.forEach((line, i) => {
     const prevEnd = i === 0 ? 0 : lines[i - 1].end;
@@ -72,6 +109,8 @@ function buildItems(lines: KaraokeLine[], romanizations?: Record<string, string>
     const words = timedTokens(line);
     const text = romanizations?.[i];
     const romanized = text ? romanizedTokens(text, words) : null;
+    const nextStart = lines[i + 1]?.start ?? Infinity;
+    const windowEnd = Math.min(nextStart, line.end + 0.5);
     items.push({
       kind: "line",
       start: line.start,
@@ -79,6 +118,8 @@ function buildItems(lines: KaraokeLine[], romanizations?: Record<string, string>
       words,
       romanized,
       parts: romanized ? [...words, ...romanized] : words,
+      chordMarks: chordMarks(words, chords, line.start, windowEnd),
+      romanizedChordMarks: romanized ? chordMarks(romanized, chords, line.start, windowEnd) : [],
       lineIndex: i,
     });
   });
@@ -111,6 +152,11 @@ type LyricsProps = {
   /** Latin-letter pronunciation for non-Latin-script lines, keyed by line index. */
   romanizations?: Record<string, string> | null;
   showRomanizations?: boolean;
+  /** Show the pronunciation as the main line and the original script underneath. */
+  romanizedFirst?: boolean;
+  /** Detected chords, shown above the words. */
+  chords?: ChordSegment[] | null;
+  showChords?: boolean;
   /** Seconds to shift the lyrics by (positive = lyrics earlier). */
   offset?: number;
 };
@@ -126,9 +172,12 @@ export const Lyrics = memo(function Lyrics({
   showTranslations = true,
   romanizations,
   showRomanizations = true,
+  romanizedFirst = false,
+  chords,
+  showChords = true,
   offset = 0,
 }: LyricsProps) {
-  const items = useMemo(() => buildItems(lines, romanizations), [lines, romanizations]);
+  const items = useMemo(() => buildItems(lines, romanizations, chords ?? []), [lines, romanizations, chords]);
   const viewportRef = useRef<HTMLDivElement>(null);
   // Read by the clock callback, so changing the offset doesn't rebuild the engine
   const offsetRef = useRef(offset);
@@ -354,6 +403,8 @@ export const Lyrics = memo(function Lyrics({
       aria-label="Lyrics"
       data-translations={showTranslations}
       data-romanizations={showRomanizations}
+      data-swap={romanizedFirst}
+      data-chords={showChords && !!chords?.length}
       className="lyrics-viewport relative h-full overflow-hidden"
     >
       <div ref={listRef} className="lyrics-list">
@@ -362,19 +413,33 @@ export const Lyrics = memo(function Lyrics({
             <p
               key={i}
               data-index={i}
+              data-has-chords={item.chordMarks.some(Boolean) || item.romanizedChordMarks.some(Boolean) || undefined}
               className="lyric-item lyric-line origin-left cursor-pointer py-[0.32em] text-[clamp(1.75rem,3.3vw,2.75rem)] leading-[1.18] font-bold tracking-[-0.015em] text-balance"
             >
-              {item.words.map((w, k) => (
-                <span key={k}>
-                  <span data-part className="lyric-word">
-                    {w.word}
-                  </span>{" "}
-                </span>
-              ))}
+              {/* Original words stay first in the DOM (fill order); CSS can swap their position */}
+              <span className="lyric-original">
+                {item.words.map((w, k) => (
+                  <span key={k} className="relative">
+                    {item.chordMarks[k] && (
+                      <span aria-hidden className="lyric-chord">
+                        {item.chordMarks[k]}
+                      </span>
+                    )}
+                    <span data-part className="lyric-word">
+                      {w.word}
+                    </span>{" "}
+                  </span>
+                ))}
+              </span>
               {item.romanized && (
-                <span lang="en" className="lyric-romanized block pt-[0.25em] text-[0.56em] leading-snug font-semibold tracking-normal">
+                <span lang="en" className="lyric-romanized leading-snug font-semibold tracking-normal">
                   {item.romanized.map((w, k) => (
-                    <span key={k}>
+                    <span key={k} className="relative">
+                      {item.romanizedChordMarks[k] && (
+                        <span aria-hidden className="lyric-chord">
+                          {item.romanizedChordMarks[k]}
+                        </span>
+                      )}
                       <span data-part className="lyric-word lyric-rword">
                         {w.word}
                       </span>{" "}

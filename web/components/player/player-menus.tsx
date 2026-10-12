@@ -1,6 +1,6 @@
 "use client";
 
-import { Languages, ListMusic, Mic2, Minus, Plus, RotateCcw } from "lucide-react";
+import { Languages, ListMusic, Mic2, Minus, Plus, RotateCcw, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { artworkUrl, imageCors, translateSong, type SongDetail } from "@/lib/api";
@@ -10,10 +10,16 @@ import { player, queuePosition, usePlayer } from "@/lib/player";
 import { useStore } from "@/lib/store";
 import { toast } from "@/lib/toast";
 import {
+  initShowChords,
   initShowRomanizations,
+  openLyricsDialog,
   initShowTranslations,
+  romanizedFirstStore,
+  setRomanizedFirst,
+  setShowChords,
   setShowRomanizations,
   setShowTranslations,
+  showChordsStore,
   showRomanizationsStore,
   showTranslationsStore,
 } from "@/lib/ui";
@@ -123,12 +129,16 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
   const { lyricsOffset } = usePlayer();
   const showTranslations = useStore(showTranslationsStore);
   const showRomanizations = useStore(showRomanizationsStore);
+  const romanizedFirst = useStore(romanizedFirstStore);
+  const showChords = useStore(showChordsStore);
+  const chordCount = detail.analysis?.chords.length ?? 0;
   const [translating, setTranslating] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     initShowTranslations();
     initShowRomanizations();
+    initShowChords();
   }, []);
 
   // While a translation runs on the server, refetch until it lands.
@@ -187,7 +197,7 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
         </HeaderButton>
       )}
     >
-      {() => (
+      {(close) => (
         <>
           {translationCount > 0 && (
             <MenuRow
@@ -201,6 +211,20 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
               title="Pronunciation"
               hint="Lines in English letters, to sing along"
               control={<Switch label="Pronunciation" checked={showRomanizations} onChange={setShowRomanizations} />}
+            />
+          )}
+          {chordCount > 0 && (
+            <MenuRow
+              title="Chords"
+              hint={`Above the lyrics · key ${detail.analysis?.key}`}
+              control={<Switch label="Chords" checked={showChords} onChange={setShowChords} />}
+            />
+          )}
+          {romanizationCount > 0 && showRomanizations && (
+            <MenuRow
+              title="Romanised first"
+              hint="Big line in English letters, original script below"
+              control={<Switch label="Romanised first" checked={romanizedFirst} onChange={setRomanizedFirst} />}
             />
           )}
           {detail.translations !== null && translationCount === 0 && !canTranslate && (
@@ -227,6 +251,26 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
               </button>
             </div>
           )}
+
+          <div className="px-3 pb-2">
+            <button
+              type="button"
+              onClick={() => {
+                close();
+                openLyricsDialog({
+                  videoId: detail.videoId,
+                  title: detail.title,
+                  artist: detail.artist,
+                  artists: detail.artists,
+                  duration: detail.duration,
+                });
+              }}
+              className="pressable flex h-9 w-full items-center justify-center gap-2 rounded-full bg-white/10 text-[13px] font-medium hover:bg-white/15"
+            >
+              <Search size={14} strokeWidth={2.25} />
+              Find different lyrics
+            </button>
+          </div>
 
           <div className="mx-3 my-1 h-px bg-white/[0.07]" />
 

@@ -24,6 +24,24 @@ export type Song = {
   stems: { instrumental: string; vocals: string } | null;
   /** Seconds to shift the lyrics by (positive = lyrics earlier). */
   lyricsOffset: number;
+  /** False for songs saved without synced lyrics (they can be added from the player). */
+  hasLyrics: boolean;
+  /** Detected key, e.g. "A minor"; null until analysed. */
+  key: string | null;
+};
+
+export type ChordSegment = { start: number; end: number; chord: string };
+
+export type SongAnalysis = {
+  key: string;
+  keyConfidence: number;
+  keyMethod: "audio" | "audio+chords";
+  chords: ChordSegment[];
+  source: string;
+  /** Beat and bar-start times in seconds (beat_this). */
+  beats: number[];
+  downbeats: number[];
+  bpm: number | null;
 };
 
 export type SongDetail = Song & {
@@ -32,10 +50,13 @@ export type SongDetail = Song & {
   translations: Record<string, string> | null;
   /** Latin-letter pronunciation for non-Latin-script lines; null if not generated yet. */
   romanizations: Record<string, string> | null;
+  /** Key and chords, detected in the background after processing. */
+  analysis: SongAnalysis | null;
+  analysisStatus: "ready" | "pending" | "failed" | "none";
 };
 
 export type StepKey = "download" | "lyrics" | "separate" | "align" | "translate";
-export type StepStatus = "pending" | "active" | "done" | "failed";
+export type StepStatus = "pending" | "active" | "done" | "failed" | "skipped";
 export type JobState = "queued" | "running" | "done" | "failed" | "cancelled";
 
 export type Job = {
@@ -52,6 +73,8 @@ export type Job = {
   artist: string | null;
   artwork: string | null;
   translationError: string | null;
+  /** Finished (or finishing) without synced lyrics. */
+  noLyrics: boolean;
 };
 
 export class ApiError extends Error {}
@@ -243,4 +266,76 @@ export function parseYouTubeId(input: string): string | null {
   } catch {
     return null;
   }
+}
+
+export type PlaylistTrack = {
+  videoId: string;
+  title: string;
+  artist: string;
+  duration: number | null;
+  explicit: boolean;
+  available: boolean;
+  thumbnail: string | null;
+  inLibrary: boolean;
+  queued: boolean;
+};
+
+export type PlaylistInfo = {
+  kind: "album" | "playlist";
+  title: string;
+  artist: string | null;
+  year: string | null;
+  cover: string | null;
+  tracks: PlaylistTrack[];
+};
+
+/** list= id of an album / playlist link that isn't a single-song link. */
+export function parsePlaylistId(input: string): string | null {
+  if (parseYouTubeId(input)) return null;
+  try {
+    const url = new URL(input.trim());
+    if (!url.hostname.endsWith("youtube.com") && url.hostname !== "youtu.be") return null;
+    return url.searchParams.get("list");
+  } catch {
+    return null;
+  }
+}
+
+export const fetchPlaylist = (url: string) => request<PlaylistInfo>(`/api/playlists?url=${encodeURIComponent(url)}`);
+
+export const createJobsBatch = (tracks: { videoId: string; title: string; artist: string }[]) =>
+  request<{ queued: string[]; skipped: string[] }>("/api/jobs/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tracks }),
+  });
+
+export type LrclibResult = {
+  id: number;
+  trackName: string;
+  artistName: string;
+  albumName: string | null;
+  duration: number | null;
+  synced: boolean;
+  instrumental: boolean;
+  preview: string[];
+};
+
+export const searchLrclib = (query: string, signal?: AbortSignal) =>
+  request<LrclibResult[]>(`/api/lyrics/search?q=${encodeURIComponent(query)}`, { signal });
+
+/** Use an LRCLIB entry or an LRC text for a song; the server re-aligns it as a job. */
+export async function setSongLyrics(videoId: string, body: { lrclibId: number } | { lrc: string }) {
+  const result = await request<{ job: Job }>(`/api/songs/${videoId}/lyrics`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  songCache.delete(videoId);
+  return result;
+}
+
+/** Timed lines in an LRC text, mirroring the server's check. */
+export function countLrcLines(text: string) {
+  return text.split(/\r?\n/).filter((line) => /^\s*\[\d+:\d+(\.\d+)?\]\s*\S/.test(line)).length;
 }

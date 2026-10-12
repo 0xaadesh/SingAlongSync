@@ -1,8 +1,21 @@
 "use client";
 
-import { Play, Search, X } from "lucide-react";
+import { Check, ListMusic, Minus, Play, Search, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { artworkUrl, imageCors, parseYouTubeId, searchSongs, watchUrl, type Job, type SearchResult } from "@/lib/api";
+import {
+  artworkUrl,
+  createJobsBatch,
+  fetchPlaylist,
+  imageCors,
+  parsePlaylistId,
+  parseYouTubeId,
+  searchSongs,
+  watchUrl,
+  type Job,
+  type PlaylistInfo,
+  type PlaylistTrack,
+  type SearchResult,
+} from "@/lib/api";
 import { formatTime } from "@/lib/format";
 import { ExplicitBadge } from "@/components/ui/explicit-badge";
 import { jobsStore, removeJob, submitJob } from "@/lib/jobs";
@@ -10,9 +23,14 @@ import { libraryStore } from "@/lib/library";
 import { player } from "@/lib/player";
 import { useStore } from "@/lib/store";
 import { addDialogStore, closeAddDialog, trackedJobStore } from "@/lib/ui";
-import { Elapsed, JobSteps, isActiveJob, jobThumb, playJob, retryJob } from "./jobs";
+import { Elapsed, JobRow, JobSteps, isActiveJob, jobThumb, playJob, retryJob } from "./jobs";
 
-type Phase = { kind: "form" } | { kind: "job"; id: string } | { kind: "exists"; videoId: string };
+type Phase =
+  | { kind: "form" }
+  | { kind: "job"; id: string }
+  | { kind: "exists"; videoId: string }
+  | { kind: "playlist"; url: string }
+  | { kind: "batch"; ids: string[]; title: string };
 
 /**
  * Add a song: search YouTube Music or paste a link, then the same dialog follows
@@ -35,6 +53,9 @@ export function AddSongDialog() {
       setPrefill(state.url);
       setSession((n) => n + 1);
       dialog.showModal();
+    } else if (state.open && dialog.open && state.jobId) {
+      // A row in the album view was clicked: show that song's progress in place
+      setPhase({ kind: "job", id: state.jobId });
     } else if (!state.open && dialog.open) {
       dialog.close();
     }
@@ -64,12 +85,21 @@ export function AddSongDialog() {
               prefill={prefill}
               onJob={(id) => setPhase({ kind: "job", id })}
               onExists={(videoId) => setPhase({ kind: "exists", videoId })}
+              onPlaylist={(url) => setPhase({ kind: "playlist", url })}
             />
           )}
           {phase.kind === "job" && <JobView id={phase.id} onAddAnother={() => setPhase({ kind: "form" })} />}
           {phase.kind === "exists" && (
             <ExistsView videoId={phase.videoId} onAddAnother={() => setPhase({ kind: "form" })} />
           )}
+          {phase.kind === "playlist" && (
+            <PlaylistView
+              url={phase.url}
+              onBack={() => setPhase({ kind: "form" })}
+              onQueued={(ids, title) => setPhase({ kind: "batch", ids, title })}
+            />
+          )}
+          {phase.kind === "batch" && <BatchView ids={phase.ids} title={phase.title} />}
         </div>
       )}
     </dialog>
@@ -108,10 +138,12 @@ function AddForm({
   prefill,
   onJob,
   onExists,
+  onPlaylist,
 }: {
   prefill?: string;
   onJob: (id: string) => void;
   onExists: (videoId: string) => void;
+  onPlaylist: (url: string) => void;
 }) {
   const [value, setValue] = useState(prefill ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +159,8 @@ function AddForm({
 
   const query = value.trim();
   const linkId = parseYouTubeId(value);
-  const isSearch = !linkId && query.length >= 2;
+  const playlistId = parsePlaylistId(value);
+  const isSearch = !linkId && !playlistId && query.length >= 2;
 
   // Search YouTube Music as you type (debounced; stale requests are aborted).
   useEffect(() => {
@@ -173,9 +206,10 @@ function AddForm({
   // A link pasted into the library search arrives prefilled: go straight to processing.
   useEffect(() => {
     const id = prefill ? parseYouTubeId(prefill) : null;
-    if (prefill && id && !autoSubmitted.current) {
+    if (prefill && !autoSubmitted.current) {
       autoSubmitted.current = true;
-      submit(prefill, id);
+      if (id) submit(prefill, id);
+      else if (parsePlaylistId(prefill)) onPlaylist(prefill.trim());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
@@ -183,6 +217,7 @@ function AddForm({
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (linkId) submit(value, linkId);
+    else if (playlistId) onPlaylist(value.trim());
     else if (results?.[active]) pick(results[active]);
   };
 
@@ -197,7 +232,7 @@ function AddForm({
 
   return (
     <form onSubmit={onSubmit} noValidate>
-      <DialogHeader title="Add a song" description="Search YouTube Music or paste a link." />
+      <DialogHeader title="Add a song" description="Search YouTube Music, or paste a song, album or playlist link." />
 
       <div className="mt-5 flex h-12 items-center gap-3 rounded-[14px] bg-bg px-3.5 shadow-[0_0_0_1px_rgb(255_255_255/0.1)] transition-shadow duration-150 focus-within:shadow-[0_0_0_1px_rgb(255_255_255/0.1),0_0_0_4px_rgb(250_45_72/0.25)]">
         {linkId ? (
@@ -208,6 +243,8 @@ function AddForm({
             height={28}
             className="image-outline enter-up size-7 shrink-0 rounded-[6px] object-cover"
           />
+        ) : playlistId ? (
+          <ListMusic size={18} strokeWidth={2} className="enter-up shrink-0 text-accent" aria-hidden />
         ) : (
           <Search size={18} strokeWidth={2} className="shrink-0 text-subtle" aria-hidden />
         )}
@@ -315,9 +352,9 @@ function AddForm({
           <button type="button" onClick={closeAddDialog} className={secondaryButton}>
             Cancel
           </button>
-          <button type="submit" disabled={!linkId || !!submitting} className={primaryButton}>
+          <button type="submit" disabled={(!linkId && !playlistId) || !!submitting} className={primaryButton}>
             {submitting && <span className="spin size-3.5 rounded-full border-2 border-white/40 border-t-white" />}
-            Add song
+            {playlistId ? "Show songs" : "Add song"}
           </button>
         </div>
       )}
@@ -363,7 +400,9 @@ function JobView({ id, onAddAnother }: { id: string; onAddAnother: () => void })
 
   const title =
     job.state === "done"
-      ? "Ready to sing"
+      ? job.noLyrics
+        ? "Ready, without lyrics"
+        : "Ready to sing"
       : job.state === "failed"
         ? "Couldn't add this song"
         : job.state === "cancelled"
@@ -504,6 +543,248 @@ function ExistsView({ videoId, onAddAnother }: { videoId: string; onAddAnother: 
             Play
           </button>
         )}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Albums and playlists
+// ---------------------------------------------------------------------------
+
+function Checkbox({ checked, indeterminate = false }: { checked: boolean; indeterminate?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`grid size-[18px] shrink-0 place-items-center rounded-[5px] transition-colors duration-150 ${
+        checked || indeterminate ? "bg-accent text-white" : "shadow-[inset_0_0_0_1.5px_rgb(255_255_255/0.3)]"
+      }`}
+    >
+      {indeterminate ? <Minus size={12} strokeWidth={3} /> : checked && <Check size={12} strokeWidth={3} />}
+    </span>
+  );
+}
+
+function PlaylistView({
+  url,
+  onQueued,
+  onBack,
+}: {
+  url: string;
+  onQueued: (ids: string[], title: string) => void;
+  onBack: () => void;
+}) {
+  const [info, setInfo] = useState<PlaylistInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPlaylist(url)
+      .then((data) => {
+        if (cancelled) return;
+        setInfo(data);
+        // Everything that can be added starts selected
+        setSelected(new Set(data.tracks.filter(canAdd).map((t) => t.videoId)));
+      })
+      .catch((e: Error) => !cancelled && setError(e.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const addable = info?.tracks.filter(canAdd) ?? [];
+  const allSelected = addable.length > 0 && addable.every((t) => selected.has(t.videoId));
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const submit = async () => {
+    if (!info || !selected.size) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const tracks = info.tracks
+        .filter((t) => selected.has(t.videoId))
+        .map((t) => ({ videoId: t.videoId, title: t.title, artist: t.artist }));
+      const result = await createJobsBatch(tracks);
+      onQueued(result.queued, info.title);
+    } catch (e) {
+      setError((e as Error).message);
+      setSubmitting(false);
+    }
+  };
+
+  if (error && !info) {
+    return (
+      <>
+        <DialogHeader title="Couldn't load that link" description={error} />
+        <div className="mt-6 flex justify-end">
+          <button type="button" onClick={onBack} className={secondaryButton}>
+            Back
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  if (!info) {
+    return (
+      <>
+        <DialogHeader title="Loading…" />
+        <div className="mt-4 flex items-center gap-3" aria-hidden>
+          <div className="skeleton size-16 rounded-[10px]" />
+          <div className="flex-1">
+            <div className="skeleton h-4 w-2/3 rounded" />
+            <div className="skeleton mt-2 h-3 w-1/3 rounded" />
+          </div>
+        </div>
+        <ResultSkeleton />
+      </>
+    );
+  }
+
+  const meta = [info.kind === "album" ? "Album" : "Playlist", info.artist, info.year, `${info.tracks.length} songs`]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <>
+      <DialogHeader title={info.kind === "album" ? "Add album" : "Add playlist"} />
+      <div className="mt-4 flex items-center gap-3">
+        {info.cover ? (
+          <img
+            src={info.cover}
+            alt=""
+            width={64}
+            height={64}
+            className="image-outline size-16 shrink-0 rounded-[10px] object-cover"
+          />
+        ) : (
+          <span className="grid size-16 shrink-0 place-items-center rounded-[10px] bg-white/[0.06] text-muted">
+            <ListMusic size={24} strokeWidth={2} />
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-[16px] font-semibold">{info.title}</p>
+          <p className="truncate text-[13px] text-muted">{meta}</p>
+        </div>
+      </div>
+
+      <div className="-mx-2 mt-4">
+        <button
+          type="button"
+          disabled={!addable.length}
+          onClick={() => setSelected(allSelected ? new Set() : new Set(addable.map((t) => t.videoId)))}
+          className="flex w-full items-center gap-3 rounded-[12px] px-2.5 py-2 text-left text-[13px] font-medium text-muted transition-colors duration-100 hover:bg-white/[0.05] disabled:opacity-50"
+        >
+          <Checkbox checked={allSelected} indeterminate={!allSelected && selected.size > 0} />
+          {allSelected ? "Deselect all" : "Select all"}
+        </button>
+        <ul className="max-h-[min(45vh,340px)] overflow-y-auto" aria-label="Tracks">
+          {info.tracks.map((track, i) => {
+            const available = canAdd(track);
+            const checked = selected.has(track.videoId);
+            return (
+              <li key={`${track.videoId}-${i}`}>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  disabled={!available}
+                  onClick={() => toggle(track.videoId)}
+                  className="flex w-full items-center gap-3 rounded-[12px] px-2.5 py-2 text-left transition-colors duration-100 hover:bg-white/[0.05] disabled:cursor-default disabled:hover:bg-transparent"
+                >
+                  {available ? <Checkbox checked={checked} /> : <span className="size-[18px] shrink-0" />}
+                  <span className="w-5 shrink-0 text-right text-[12px] text-subtle tabular-nums">{i + 1}</span>
+                  <span className={`min-w-0 flex-1 ${available ? "" : "opacity-50"}`}>
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-[14px] font-medium">{track.title}</span>
+                      {track.explicit && <ExplicitBadge />}
+                    </span>
+                    <span className="block truncate text-[12px] text-muted">{track.artist}</span>
+                  </span>
+                  {track.inLibrary ? (
+                    <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-muted">
+                      In library
+                    </span>
+                  ) : track.queued ? (
+                    <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-muted">
+                      Queued
+                    </span>
+                  ) : !track.available ? (
+                    <span className="shrink-0 text-[11px] text-subtle">Unavailable</span>
+                  ) : (
+                    track.duration != null && (
+                      <span className="shrink-0 text-[12px] text-subtle tabular-nums">{formatTime(track.duration)}</span>
+                    )
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {error && (
+        <p role="alert" className="mt-2 text-[13px] text-danger">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex items-center gap-2">
+        <p className="mr-auto text-[12px] text-subtle">Songs are processed one at a time.</p>
+        <button type="button" onClick={onBack} className={secondaryButton}>
+          Back
+        </button>
+        <button type="button" onClick={submit} disabled={!selected.size || submitting} className={primaryButton}>
+          {submitting && <span className="spin size-3.5 rounded-full border-2 border-white/40 border-t-white" />}
+          {selected.size ? `Add ${selected.size} ${selected.size === 1 ? "song" : "songs"}` : "Add songs"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+const canAdd = (t: PlaylistTrack) => t.available && !t.inLibrary && !t.queued;
+
+function BatchView({ ids, title }: { ids: string[]; title: string }) {
+  const { jobs } = useStore(jobsStore);
+  const batch = ids.map((id) => jobs.find((j) => j.id === id)).filter((j): j is Job => !!j);
+  const done = batch.filter((j) => j.state === "done").length;
+
+  return (
+    <>
+      <DialogHeader
+        title={ids.length ? `Adding ${ids.length} ${ids.length === 1 ? "song" : "songs"}` : "Nothing to add"}
+        description={ids.length ? title : "Every song from this link is already in your library or queued."}
+      />
+      {ids.length > 0 && (
+        <>
+          <p className="mt-3 text-[13px] text-muted tabular-nums" aria-live="polite">
+            {done} of {ids.length} ready
+          </p>
+          <ul className="-mx-2.5 mt-2 max-h-[min(50vh,380px)] overflow-y-auto">
+            {batch.map((job) => (
+              <JobRow key={job.id} job={job} />
+            ))}
+          </ul>
+        </>
+      )}
+      <div className="mt-5 flex items-center gap-2">
+        <p className="mr-auto text-[12px] text-subtle text-pretty">You can close this. Progress stays in Downloads.</p>
+        <button
+          type="button"
+          onClick={closeAddDialog}
+          className="pressable h-9 rounded-full bg-white px-4 text-[14px] font-semibold text-black hover:bg-white/85"
+        >
+          Done
+        </button>
       </div>
     </>
   );

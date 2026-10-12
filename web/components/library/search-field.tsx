@@ -1,8 +1,8 @@
 "use client";
 
-import { CornerDownLeft, Search, X } from "lucide-react";
+import { CornerDownLeft, ListMusic, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { parseYouTubeId } from "@/lib/api";
+import { parsePlaylistId, parseYouTubeId } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { openAddDialog, searchStore } from "@/lib/ui";
 
@@ -11,7 +11,9 @@ export function SearchField() {
   const query = useStore(searchStore);
   const inputRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
-  const isLink = parseYouTubeId(query) !== null;
+  const linkVideoId = parseYouTubeId(query);
+  const isPlaylist = parsePlaylistId(query) !== null;
+  const isLink = linkVideoId !== null || isPlaylist;
 
   // "/" jumps to search from anywhere, like most apps.
   useEffect(() => {
@@ -91,15 +93,21 @@ export function SearchField() {
           onClick={addFromLink}
           className="enter-up absolute inset-x-0 top-full mt-2 flex items-center gap-3 rounded-[14px] bg-surface-2 p-2 pr-3 text-left shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_16px_40px_-8px_rgb(0_0_0/0.8)] transition-colors duration-150 hover:bg-[#232326]"
         >
-          <img
-            src={`https://i.ytimg.com/vi/${parseYouTubeId(query)}/mqdefault.jpg`}
-            alt=""
-            width={40}
-            height={40}
-            className="image-outline size-10 shrink-0 rounded-md object-cover"
-          />
+          {linkVideoId ? (
+            <img
+              src={`https://i.ytimg.com/vi/${linkVideoId}/mqdefault.jpg`}
+              alt=""
+              width={40}
+              height={40}
+              className="image-outline size-10 shrink-0 rounded-md object-cover"
+            />
+          ) : (
+            <span className="grid size-10 shrink-0 place-items-center rounded-md bg-white/[0.06] text-accent">
+              <ListMusic size={18} strokeWidth={2} />
+            </span>
+          )}
           <span className="min-w-0 flex-1">
-            <span className="block text-[14px] font-medium">Add this song</span>
+            <span className="block text-[14px] font-medium">{isPlaylist ? "Add songs from this album or playlist" : "Add this song"}</span>
             <span className="block truncate text-[12px] text-muted">{query.trim()}</span>
           </span>
           <CornerDownLeft size={15} strokeWidth={2} className="shrink-0 text-subtle" aria-hidden />

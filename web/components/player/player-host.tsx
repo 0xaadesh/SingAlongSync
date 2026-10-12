@@ -20,6 +20,8 @@ export function PlayerHost() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      // An open dialog (add song, lyrics, confirm) owns the keyboard, Escape included
+      if (document.querySelector("dialog[open]")) return;
       const { song, sheetOpen } = playerStore.get();
       if (!song) return;
       // Leave Space alone on focused controls so it still activates them.
