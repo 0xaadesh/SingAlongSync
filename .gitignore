@@ -14,9 +14,9 @@ separated/
 *.m4a
 *.flac
 *.webm
-*.json
-!pyproject.toml
-!uv.lock
+
+# Environment variables / secrets
+.env
 
 # IDE / Editor configuration
 .vscode/
@@ -27,3 +27,9 @@ separated/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Server-side caches (artist avatars from YouTube Music)
+server/cache/
+
+# AI provider settings and API keys
+server/settings.json
