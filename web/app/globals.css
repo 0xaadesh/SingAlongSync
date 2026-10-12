@@ -1,0 +1,540 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0a0b;
+  --color-surface: #141416;
+  --color-surface-2: #1c1c1f;
+  --color-fg: #f5f5f7;
+  --color-muted: rgb(235 235 245 / 0.6);
+  --color-subtle: rgb(235 235 245 / 0.32);
+  --color-accent: #fa2d48;
+  --color-accent-hover: #ff4560;
+  --color-danger: #ff453a;
+  --color-success: #30d158;
+
+  --font-sans: var(--font-geist-sans), "Nirmala UI", "Noto Sans Devanagari", "Noto Sans Gurmukhi",
+    "Noto Sans Tamil", "Noto Sans Telugu", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-icon: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar: slim translucent thumb on a transparent track */
+@supports not selector(::-webkit-scrollbar) {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.18) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.16);
+  border-radius: 999px;
+  /* Transparent border insets the thumb so it reads as a 6px pill */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(255 255 255 / 0.3);
+}
+
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-corner {
+  display: none;
+  background: transparent;
+}
+
+::selection {
+  background: rgb(250 45 72 / 0.35);
+}
+
+/* In the base layer so utilities like outline-none can override it
+   (the URL input shows focus on its wrapper instead). */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+/* ---------- Surfaces: shadows for elevation, no decorative borders ---------- */
+
+.surface {
+  background: var(--color-surface);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.4),
+    0 8px 24px -12px rgb(0 0 0 / 0.5);
+}
+
+.image-outline {
+  outline: 1px solid oklch(1 0 0 / 0.1);
+  outline-offset: -1px;
+}
+
+/* ---------- Press feedback ---------- */
+
+/* Unlayered, so this wins over Tailwind transition utilities: it names every
+   property a pressable control changes. */
+.pressable {
+  transition-property: scale, background-color, color, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-out);
+}
+
+.pressable:active:not(:disabled) {
+  scale: 0.96;
+}
+
+/* ---------- Icon cross-fade (both icons stay mounted) ---------- */
+
+.icon-swap {
+  display: grid;
+  place-items: center;
+}
+
+.icon-swap > * {
+  grid-area: 1 / 1;
+  transition-property: opacity, scale, filter;
+  transition-duration: 300ms;
+  transition-timing-function: var(--ease-icon);
+}
+
+.icon-swap > [data-hidden="true"] {
+  opacity: 0;
+  scale: 0.25;
+  filter: blur(4px);
+}
+
+/* ---------- Enter animation for mounted-on-demand elements ---------- */
+
+.enter-up {
+  transition-property: opacity, translate;
+  transition-duration: 280ms;
+  transition-timing-function: var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+/* ---------- Spinner ---------- */
+
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+.spin {
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes pulse-soft {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.skeleton {
+  background: rgb(255 255 255 / 0.06);
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+/* ---------- Now-playing equalizer ---------- */
+
+@keyframes eq {
+  0%,
+  100% {
+    scale: 1 0.3;
+  }
+  50% {
+    scale: 1 1;
+  }
+}
+
+.eq > span {
+  transform-origin: bottom;
+  animation: eq 900ms ease-in-out infinite;
+}
+
+.eq > span:nth-child(2) {
+  animation-delay: -300ms;
+  animation-duration: 750ms;
+}
+
+.eq > span:nth-child(3) {
+  animation-delay: -600ms;
+  animation-duration: 1050ms;
+}
+
+.eq[data-paused="true"] > span {
+  animation-play-state: paused;
+}
+
+/* ---------- Player sheet ---------- */
+
+.player-sheet {
+  translate: 0 100%;
+  visibility: hidden;
+  transition:
+    translate 300ms var(--ease-drawer),
+    visibility 0s linear 300ms;
+}
+
+.player-sheet[data-open="true"] {
+  translate: 0 0;
+  visibility: visible;
+  transition:
+    translate 460ms var(--ease-drawer),
+    visibility 0s;
+}
+
+.player-sheet[data-dragging="true"] {
+  transition: none;
+}
+
+/* Ambient artwork backdrop: a tiny pre-blurred canvas, scaled up and slowly rotated.
+   Only transform animates, so it stays on the compositor. */
+
+@keyframes ambient-a {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes ambient-b {
+  to {
+    rotate: -360deg;
+  }
+}
+
+.ambient-layer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150vmax;
+  height: 150vmax;
+  margin: -75vmax 0 0 -75vmax;
+  will-change: transform;
+}
+
+.ambient-layer[data-layer="a"] {
+  animation: ambient-a 80s linear infinite;
+}
+
+.ambient-layer[data-layer="b"] {
+  animation: ambient-b 110s linear infinite;
+  opacity: 0.5;
+  scale: 0.8;
+}
+
+.ambient-backdrop {
+  opacity: 0;
+  transition: opacity 900ms ease;
+}
+
+.ambient-backdrop[data-ready="true"] {
+  opacity: 1;
+}
+
+.ambient-backdrop[data-paused="true"] .ambient-layer {
+  animation-play-state: paused;
+}
+
+.player-artwork {
+  transition: scale 550ms var(--ease-drawer);
+}
+
+.player-artwork[data-paused="true"] {
+  scale: 0.86;
+}
+
+/* ---------- Lyrics ---------- */
+
+.lyrics-viewport {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 72%, transparent 100%);
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.lyrics-list {
+  transition: translate 500ms var(--ease-drawer);
+}
+
+.lyrics-viewport[data-browsing="true"] .lyrics-list {
+  transition: none;
+}
+
+.lyric-item {
+  transition-property: transform, opacity, filter;
+  transition-duration: 720ms, 400ms, 400ms;
+  transition-timing-function: var(--ease-drawer), ease, ease;
+  opacity: 0.3;
+}
+
+.lyric-item[data-instant="true"] {
+  transition: none;
+}
+
+.lyric-item.is-active {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lyric-item[data-d="1"] {
+    filter: blur(0.6px);
+  }
+  .lyric-item[data-d="2"] {
+    filter: blur(1.2px);
+  }
+  .lyric-item[data-d="3"] {
+    filter: blur(1.8px);
+  }
+  .lyrics-viewport[data-browsing="true"] .lyric-item {
+    filter: none;
+  }
+  .lyric-line:hover {
+    opacity: 0.65;
+    filter: none;
+  }
+  .lyric-line.is-active:hover {
+    opacity: 1;
+  }
+}
+
+.lyric-word {
+  display: inline-block;
+  white-space: pre;
+  /* background-clip: text only paints inside the box. Pad it so marks that rise above
+     or hang beyond the glyph box (Devanagari matras, Gurmukhi tippi) still get filled,
+     and cancel the padding with margins so layout doesn't move. */
+  padding: 0.3em 0.1em;
+  margin: -0.3em -0.1em;
+  transition: translate 700ms var(--ease-out);
+}
+
+/* Active line: each word fills left-to-right as it is sung (--p goes 0 to 1). */
+.lyric-line.is-active .lyric-word {
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    #fff calc(var(--p, 0) * 115% - 15%),
+    rgb(255 255 255 / 0.38) calc(var(--p, 0) * 115%)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.lyric-line.is-active .lyric-word.is-sung {
+  translate: 0 -0.05em;
+}
+
+.lyric-gap .gap-dot {
+  opacity: calc(0.3 + var(--p, 0) * 0.7);
+  scale: calc(0.8 + var(--p, 0) * 0.35);
+}
+
+.lyric-gap:not(.is-active) {
+  opacity: 0;
+}
+
+.lyric-gap .gap-dot {
+  transition:
+    opacity 200ms ease,
+    scale 200ms var(--ease-out);
+}
+
+/* ---------- Slider ---------- */
+
+.slider-track {
+  transition: scale 200ms var(--ease-out);
+  scale: 1 0.6;
+}
+
+.slider:hover .slider-track,
+.slider[data-dragging="true"] .slider-track,
+.slider:focus-visible .slider-track {
+  scale: 1 1;
+}
+
+.slider-fill {
+  transform-origin: left;
+}
+
+/* ---------- Stepper ---------- */
+
+.step-connector-fill {
+  transform-origin: left;
+  transition: scale 500ms var(--ease-out);
+}
+
+.progress-ring {
+  transition: stroke-dashoffset 400ms var(--ease-out);
+}
+
+
+/* ---------- Marquee (overflowing single-line text) ---------- */
+
+/* Rests at the start, then scrolls one text-width; the repeated copy makes the loop seamless. */
+@keyframes marquee {
+  0%,
+  20% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(calc(-1 * var(--marquee-distance)));
+  }
+}
+
+.marquee[data-overflow="true"] {
+  mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 20px), transparent);
+}
+
+.marquee[data-overflow="true"] .marquee-track {
+  animation-name: marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.marquee:hover .marquee-track,
+.group:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee .marquee-track {
+    animation: none !important;
+  }
+  .ambient-layer,
+  .eq > span {
+    animation: none !important;
+  }
+  .player-artwork,
+  .lyric-word {
+    transition: none;
+  }
+  .pressable:active:not(:disabled) {
+    scale: 1;
+  }
+  .player-sheet {
+    translate: 0 0;
+    opacity: 0;
+    transition:
+      opacity 200ms ease,
+      visibility 0s linear 200ms;
+  }
+  .player-sheet[data-open="true"] {
+    translate: 0 0;
+    opacity: 1;
+    transition:
+      opacity 200ms ease,
+      visibility 0s;
+  }
+  .lyric-item {
+    transition-property: opacity;
+  }
+  .enter-up {
+    transition-property: opacity;
+    @starting-style {
+      opacity: 0;
+    }
+  }
+}
+
+/* ---------- Dialogs (native <dialog>: focus trap, Esc and top layer for free) ---------- */
+
+.app-dialog {
+  opacity: 1;
+  scale: 1;
+  transition:
+    opacity 180ms var(--ease-out),
+    scale 180ms var(--ease-out),
+    overlay 180ms allow-discrete,
+    display 180ms allow-discrete;
+
+  @starting-style {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+.app-dialog:not([open]) {
+  opacity: 0;
+  scale: 0.98;
+  transition-duration: 120ms;
+}
+
+.app-dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+  transition:
+    opacity 180ms ease,
+    overlay 180ms allow-discrete,
+    display 180ms allow-discrete;
+}
+
+.app-dialog:not([open])::backdrop {
+  opacity: 0;
+}
+
+@starting-style {
+  .app-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* ---------- Popover menus: scale in from their trigger in the top-right ---------- */
+
+.card-menu {
+  transform-origin: top right;
+  transition:
+    opacity 150ms var(--ease-out),
+    scale 150ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    scale: 0.95;
+  }
+}
+
+/* ---------- Lyric translations ---------- */
+
+.lyric-translation {
+  color: rgb(255 255 255 / 0.62);
+}
+
+.lyrics-viewport[data-translations="false"] .lyric-translation {
+  display: none;
+}
