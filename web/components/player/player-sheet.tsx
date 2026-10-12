@@ -5,21 +5,22 @@ import { useEffect, useRef, type PointerEvent } from "react";
 import { artworkUrl, imageCors } from "@/lib/api";
 import { player, usePlayer } from "@/lib/player";
 import { useStore } from "@/lib/store";
-import { showTranslationsStore } from "@/lib/ui";
+import { showRomanizationsStore, showTranslationsStore } from "@/lib/ui";
 import { Marquee } from "@/components/ui/marquee";
 import { Ambient } from "./ambient";
 import { TransportControls, VolumeControl } from "./controls";
 import { Lyrics } from "./lyrics";
 import { Progress } from "./progress";
-import { TranslationButton } from "./translation-button";
+import { KaraokeMenu, LyricsMenu, QueueMenu } from "./player-menus";
 
 const DISMISS_DISTANCE = 140;
 const DISMISS_VELOCITY = 0.11; // px per ms: a quick flick is enough
 
 /** Full-screen "Now Playing" view with synced lyrics. Slides up over the library. */
 export function PlayerSheet() {
-  const { song, detail, detailError, playing, sheetOpen } = usePlayer();
+  const { song, detail, detailError, playing, sheetOpen, lyricsOffset } = usePlayer();
   const showTranslations = useStore(showTranslationsStore);
+  const showRomanizations = useStore(showRomanizationsStore);
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const drag = useRef<{ id: number; startY: number; startTime: number; dy: number } | null>(null);
@@ -38,7 +39,9 @@ export function PlayerSheet() {
   }, [sheetOpen]);
 
   const onPointerDown = (e: PointerEvent<HTMLElement>) => {
-    if (e.button !== 0 || drag.current || (e.target as HTMLElement).closest("button")) return;
+    // Only drag from empty header space, never from controls or the open menus
+    const target = e.target as HTMLElement;
+    if (e.button !== 0 || drag.current || target.closest("button, a, input, [role=slider], [role=dialog]")) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { id: e.pointerId, startY: e.clientY, startTime: performance.now(), dy: 0 };
     sheetRef.current!.dataset.dragging = "true";
@@ -80,7 +83,7 @@ export function PlayerSheet() {
 
       <div className="relative flex h-full flex-col">
         <header
-          className="flex h-16 shrink-0 cursor-grab touch-none items-center justify-between gap-4 px-4 active:cursor-grabbing sm:px-6"
+          className="relative z-10 flex h-16 shrink-0 cursor-grab touch-none items-center justify-between gap-4 px-4 active:cursor-grabbing sm:px-6"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -96,7 +99,15 @@ export function PlayerSheet() {
             <ChevronDown size={22} strokeWidth={2} />
           </button>
           <div aria-hidden className="mx-auto h-1.5 w-10 rounded-full bg-white/25 lg:hidden" />
-          {detail ? <TranslationButton key={detail.videoId} detail={detail} /> : <div aria-hidden className="size-10" />}
+          {detail ? (
+            <div className="flex items-center gap-2">
+              <KaraokeMenu detail={detail} />
+              <LyricsMenu key={detail.videoId} detail={detail} />
+              <QueueMenu />
+            </div>
+          ) : (
+            <div aria-hidden className="size-10" />
+          )}
         </header>
 
         <main
@@ -151,6 +162,9 @@ export function PlayerSheet() {
                       active={sheetOpen}
                       translations={detail.translations}
                       showTranslations={showTranslations}
+                      romanizations={detail.romanizations}
+                      showRomanizations={showRomanizations}
+                      offset={lyricsOffset}
                     />
                   ) : (
                     <LyricsMessage>No synced lyrics for this song.</LyricsMessage>

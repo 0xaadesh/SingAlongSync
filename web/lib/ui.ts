@@ -42,3 +42,25 @@ export function setShowTranslations(show: boolean) {
     // Not persisted; still applies for this session
   }
 }
+
+const ROMANIZATIONS_KEY = "sas:show-romanizations";
+
+/** Whether the player shows Latin-letter pronunciation under non-Latin-script lines. */
+export const showRomanizationsStore = createStore(true);
+
+export function initShowRomanizations() {
+  try {
+    showRomanizationsStore.set(localStorage.getItem(ROMANIZATIONS_KEY) !== "false");
+  } catch {
+    // Storage unavailable; keep the default
+  }
+}
+
+export function setShowRomanizations(show: boolean) {
+  showRomanizationsStore.set(show);
+  try {
+    localStorage.setItem(ROMANIZATIONS_KEY, String(show));
+  } catch {
+    // Not persisted; still applies for this session
+  }
+}

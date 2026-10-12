@@ -18,6 +18,9 @@ import { toast } from "@/lib/toast";
 import { PageHeading, plural } from "@/components/library/states";
 import { Combobox } from "@/components/ui/combobox";
 import { Switch } from "@/components/ui/switch";
+import { Tabs } from "@/components/ui/tabs";
+import { AlignmentCard } from "./alignment-card";
+import { YouTubeAccessCard } from "./youtube-access";
 
 const PROVIDER_INFO: Record<ProviderId, { tagline: string; keyUrl: string; keyHint: string }> = {
   openai: { tagline: "GPT models", keyUrl: "https://platform.openai.com/api-keys", keyHint: "sk-…" },
@@ -43,6 +46,7 @@ function ProviderLogo({ id, size = 24 }: { id: ProviderId; size?: number }) {
 type Save = (update: SettingsUpdate, optimistic?: Partial<Settings>) => Promise<boolean>;
 
 export function SettingsView() {
+  const { tab, selectTab } = useSettingsTab();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -72,10 +76,55 @@ export function SettingsView() {
       ) : !settings ? (
         <div className="skeleton h-[340px] rounded-[20px]" aria-hidden />
       ) : (
-        <TranslationCard settings={settings} save={save} />
+        <>
+          <div className="mb-4">
+            <Tabs tabs={SETTINGS_TABS} value={tab} onChange={selectTab} label="Settings sections" idPrefix="settings" />
+          </div>
+          <div
+            key={tab}
+            role="tabpanel"
+            id={`settings-panel-${tab}`}
+            aria-labelledby={`settings-tab-${tab}`}
+            className="enter-up"
+          >
+            {tab === "ai" && <TranslationCard settings={settings} save={save} />}
+            {tab === "lyrics" && <AlignmentCard settings={settings} save={save} />}
+            {tab === "youtube" && <YouTubeAccessCard settings={settings} save={save} />}
+          </div>
+        </>
       )}
     </div>
   );
+}
+
+const SETTINGS_TABS = [
+  { id: "ai", label: "AI translation" },
+  { id: "lyrics", label: "Lyrics" },
+  { id: "youtube", label: "YouTube access" },
+];
+
+type SettingsTab = "ai" | "lyrics" | "youtube";
+
+/** Selected tab, mirrored in the URL hash (#ai, #lyrics, #youtube) so it survives reloads and links. */
+function useSettingsTab() {
+  const [tab, setTab] = useState<SettingsTab>("ai");
+
+  useEffect(() => {
+    const fromHash = () => {
+      const hash = window.location.hash.slice(1);
+      if (SETTINGS_TABS.some((t) => t.id === hash)) setTab(hash as SettingsTab);
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
+
+  const selectTab = (id: string) => {
+    setTab(id as SettingsTab);
+    window.history.replaceState(null, "", `#${id}`);
+  };
+
+  return { tab, selectTab };
 }
 
 /**

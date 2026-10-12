@@ -1,12 +1,14 @@
 /**
- * Playback engine: one <audio> element for the whole app, a store for the UI state
- * that changes rarely, and a requestAnimationFrame clock for playback time.
+ * Playback engine: one main <audio> element for the whole app (plus a second one
+ * for guide vocals in karaoke mode), a store for the UI state that changes rarely,
+ * and a requestAnimationFrame clock for playback time.
  *
  * Time never goes through React state. Components that need it (progress bars,
  * lyrics) subscribe to the clock and write to the DOM directly, so playback
  * causes zero React re-renders per frame.
  */
-import { artworkUrl, assetUrl, fetchSong, invalidateSong, type Song, type SongDetail } from "./api";
+import { artworkUrl, assetUrl, fetchSong, invalidateSong, setLyricsOffset, type Song, type SongDetail } from "./api";
+import { recordPlay } from "./history";
 import { libraryStore } from "./library";
 import { createStore, useStore } from "./store";
 import { toast } from "./toast";
@@ -23,6 +25,12 @@ export type PlayerState = {
   sheetOpen: boolean;
   /** What Next/Previous step through; null means the whole library. */
   queue: Song[] | null;
+  /** Karaoke mode: play the instrumental stem, with optional guide vocals. */
+  karaoke: boolean;
+  /** Guide vocal volume in karaoke mode, relative to the main volume (0-1). */
+  vocalLevel: number;
+  /** Seconds the current song's lyrics are shifted by (positive = earlier). */
+  lyricsOffset: number;
 };
 
 export const playerStore = createStore<PlayerState>({
@@ -36,13 +44,20 @@ export const playerStore = createStore<PlayerState>({
   muted: false,
   sheetOpen: false,
   queue: null,
+  karaoke: false,
+  vocalLevel: 0,
+  lyricsOffset: 0,
 });
 
 export const usePlayer = () => useStore(playerStore);
 
 const VOLUME_KEY = "sas:volume";
+const KARAOKE_KEY = "sas:karaoke";
+const VOCAL_LEVEL_KEY = "sas:vocal-level";
 
 let audio: HTMLAudioElement | null = null;
+/** Second element that plays the vocal stem alongside the instrumental in karaoke mode. */
+let vocals: HTMLAudioElement | null = null;
 const patch = (p: Partial<PlayerState>) => playerStore.set((s) => ({ ...s, ...p }));
 
 // ---------------------------------------------------------------------------
@@ -163,14 +178,83 @@ function registerMediaSession() {
 }
 
 // ---------------------------------------------------------------------------
+// Karaoke: instrumental on the main element, vocals on a second one kept in sync
+// ---------------------------------------------------------------------------
+
+function mainSource(song: Song) {
+  return assetUrl(playerStore.get().karaoke && song.stems ? song.stems.instrumental : song.audio)!;
+}
+
+function vocalsWanted() {
+  const { karaoke, song, vocalLevel } = playerStore.get();
+  return !!(karaoke && song?.stems && vocalLevel > 0);
+}
+
+function setVocalsSource(song: Song | null) {
+  if (!vocals) return;
+  const url = playerStore.get().karaoke && song?.stems ? assetUrl(song.stems.vocals) : null;
+  if (url) {
+    if (vocals.src !== url) vocals.src = url;
+  } else if (vocals.getAttribute("src")) {
+    vocals.pause();
+    vocals.removeAttribute("src");
+    vocals.load();
+  }
+}
+
+function applyVocalsVolume() {
+  if (!vocals || !audio) return;
+  vocals.volume = Math.min(1, audio.volume * playerStore.get().vocalLevel);
+  vocals.muted = audio.muted;
+}
+
+/** Snap the vocals to the instrumental's position and match its play state. */
+function alignVocals() {
+  if (!vocals || !audio) return;
+  if (!vocalsWanted() || audio.paused) {
+    vocals.pause();
+    return;
+  }
+  vocals.currentTime = audio.currentTime;
+  vocals.playbackRate = 1;
+  vocals.play().catch(() => {});
+}
+
+let driftTimer = 0;
+
+/**
+ * Two media elements drift apart over a song. Nudge the vocals' playback rate to
+ * close small gaps inaudibly, and jump when they're clearly apart.
+ */
+function correctDrift() {
+  if (!audio || !vocals || audio.paused || !vocalsWanted()) return;
+  if (vocals.paused) return alignVocals();
+  const diff = vocals.currentTime - audio.currentTime;
+  if (Math.abs(diff) > 0.25) {
+    vocals.currentTime = audio.currentTime;
+    vocals.playbackRate = 1;
+  } else if (Math.abs(diff) > 0.03) {
+    vocals.playbackRate = 1 - Math.max(-0.05, Math.min(0.05, diff));
+  } else {
+    vocals.playbackRate = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Loading
 // ---------------------------------------------------------------------------
 
+let offsetSaveTimer = 0;
+
 function loadSong(song: Song, autoplay: boolean) {
   if (!audio) return;
-  audio.src = assetUrl(song.audio)!;
-  if (autoplay) audio.play().catch(() => {});
-  patch({ song, detail: null, detailError: null, duration: song.duration, buffering: autoplay });
+  patch({ song, detail: null, detailError: null, duration: song.duration, buffering: autoplay, lyricsOffset: song.lyricsOffset ?? 0 });
+  audio.src = mainSource(song);
+  setVocalsSource(song);
+  if (autoplay) {
+    audio.play().catch(() => {});
+    recordPlay(song.videoId);
+  }
   emitNow();
   updateMediaMetadata(song);
   if (playerStore.get().sheetOpen) window.history.replaceState(null, "", `?v=${song.videoId}`);
@@ -195,12 +279,20 @@ export function queuePosition(state: PlayerState = playerStore.get(), library: S
 // ---------------------------------------------------------------------------
 
 export const player = {
-  /** Wire up the app's single <audio> element. Returns a cleanup function. */
-  attach(el: HTMLAudioElement) {
+  /** Wire up the app's audio elements (main + karaoke vocals). Returns a cleanup function. */
+  attach(el: HTMLAudioElement, vocalsEl: HTMLAudioElement) {
     audio = el;
+    vocals = vocalsEl;
     const stored = parseFloat(localStorage.getItem(VOLUME_KEY) ?? "");
     el.volume = stored >= 0 && stored <= 1 ? stored : 0.8;
-    patch({ volume: el.volume });
+    const storedLevel = parseFloat(localStorage.getItem(VOCAL_LEVEL_KEY) ?? "");
+    patch({
+      volume: el.volume,
+      karaoke: localStorage.getItem(KARAOKE_KEY) === "true",
+      vocalLevel: storedLevel >= 0 && storedLevel <= 1 ? storedLevel : 0,
+    });
+    applyVocalsVolume();
+    driftTimer = window.setInterval(correctDrift, 250);
 
     const on = <K extends keyof HTMLMediaElementEventMap>(type: K, fn: () => void) => {
       el.addEventListener(type, fn);
@@ -211,26 +303,38 @@ export const player = {
       on("play", () => {
         patch({ playing: true });
         syncLoop();
+        alignVocals();
         updatePositionState();
       }),
       on("pause", () => {
         patch({ playing: false, buffering: false });
         syncLoop();
+        vocals?.pause();
         emitNow();
         updatePositionState();
       }),
-      on("waiting", () => patch({ buffering: true })),
-      on("playing", () => patch({ buffering: false })),
+      on("waiting", () => {
+        patch({ buffering: true });
+        vocals?.pause();
+      }),
+      on("playing", () => {
+        patch({ buffering: false });
+        alignVocals();
+      }),
       on("canplay", () => patch({ buffering: false })),
       on("seeked", () => {
         emitNow();
+        alignVocals();
         updatePositionState();
       }),
       on("durationchange", () => {
         if (Number.isFinite(el.duration)) patch({ duration: el.duration });
         updatePositionState();
       }),
-      on("volumechange", () => patch({ volume: el.volume, muted: el.muted })),
+      on("volumechange", () => {
+        patch({ volume: el.volume, muted: el.muted });
+        applyVocalsVolume();
+      }),
       on("ended", () => {
         const { songs, index } = queuePosition();
         if (index >= 0 && index < songs.length - 1) loadSong(songs[index + 1], true);
@@ -258,8 +362,10 @@ export const player = {
       offs.forEach((off) => off());
       window.removeEventListener("popstate", onPopState);
       cancelAnimationFrame(rafId);
+      clearInterval(driftTimer);
       rafId = 0;
       audio = null;
+      vocals = null;
     };
   },
 
@@ -296,10 +402,63 @@ export const player = {
     audio.pause();
     audio.removeAttribute("src");
     audio.load();
+    setVocalsSource(null);
     if (playerStore.get().sheetOpen) player.closeSheet();
     patch({ song: null, detail: null, detailError: null, playing: false, buffering: false, duration: 0, queue: null });
     if ("mediaSession" in navigator) navigator.mediaSession.metadata = null;
   },
+
+  /** Switch karaoke mode, keeping the playback position and play state. */
+  setKaraoke(on: boolean) {
+    patch({ karaoke: on });
+    localStorage.setItem(KARAOKE_KEY, String(on));
+    const { song } = playerStore.get();
+    if (!audio || !song) return;
+    const source = mainSource(song);
+    if (audio.src !== source) {
+      const time = audio.currentTime;
+      const wasPlaying = !audio.paused;
+      audio.src = source;
+      // Applied once the new source loads
+      audio.currentTime = time;
+      if (wasPlaying) audio.play().catch(() => {});
+    }
+    setVocalsSource(song);
+    alignVocals();
+  },
+
+  /** Guide vocal volume in karaoke mode (0 = instrumental only). */
+  setVocalLevel(level: number) {
+    const vocalLevel = Math.max(0, Math.min(1, level));
+    patch({ vocalLevel });
+    localStorage.setItem(VOCAL_LEVEL_KEY, String(vocalLevel));
+    applyVocalsVolume();
+    alignVocals();
+  },
+
+  /** Shift the current song's lyrics (seconds, positive = earlier). Saved after a short pause. */
+  setLyricsOffset(offset: number) {
+    const { song, detail } = playerStore.get();
+    if (!song) return;
+    const lyricsOffset = Math.round(Math.max(-10, Math.min(10, offset)) * 100) / 100;
+    patch({ lyricsOffset, detail: detail && { ...detail, lyricsOffset } });
+    // Keep the library copy in step so reopening the song uses the new offset
+    libraryStore.set((s) => ({
+      ...s,
+      songs: s.songs.map((x) => (x.videoId === song.videoId ? { ...x, lyricsOffset } : x)),
+    }));
+    emitNow();
+    clearTimeout(offsetSaveTimer);
+    offsetSaveTimer = window.setTimeout(() => {
+      invalidateSong(song.videoId);
+      setLyricsOffset(song.videoId, lyricsOffset).catch(() =>
+        toast({ title: "Couldn't save the lyrics timing", tone: "error" }),
+      );
+    }, 600);
+  },
+
+  /** Re-send the current time to subscribers (e.g. after the lyrics offset changes while paused). */
+  resync: () => emitNow(),
 
   /** Refetch the current song's detail (e.g. once its translations are ready). */
   async refreshDetail() {

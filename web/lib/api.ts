@@ -20,12 +20,18 @@ export type Song = {
   artwork: string | null;
   audio: string;
   addedAt: number;
+  /** Compressed stems for karaoke mode; null until encoded. */
+  stems: { instrumental: string; vocals: string } | null;
+  /** Seconds to shift the lyrics by (positive = lyrics earlier). */
+  lyricsOffset: number;
 };
 
 export type SongDetail = Song & {
   lines: KaraokeLine[];
   /** English for non-English lines, keyed by line index; null until translated. */
   translations: Record<string, string> | null;
+  /** Latin-letter pronunciation for non-Latin-script lines; null if not generated yet. */
+  romanizations: Record<string, string> | null;
 };
 
 export type StepKey = "download" | "lyrics" | "separate" | "align" | "translate";
@@ -146,9 +152,24 @@ export type Settings = {
   /** Masked saved key per provider, null when none. */
   keys: Record<ProviderId, string | null>;
   providers: { id: ProviderId; name: string }[];
+  /** Browser yt-dlp reads YouTube cookies from, or null. */
+  cookiesBrowser: string | null;
+  /** Path to an exported cookies.txt, or null. */
+  cookiesFile: string | null;
+  cookieBrowsers: string[];
+  alignmentMode: AlignmentMode;
 };
 
-export type SettingsUpdate = Partial<Pick<Settings, "provider" | "model" | "translationEnabled">> & { apiKey?: string };
+export type AlignmentMode = "auto" | "native" | "romanized";
+
+export type SettingsUpdate = Partial<Pick<Settings, "provider" | "model" | "translationEnabled" | "alignmentMode">> & {
+  apiKey?: string;
+  /** Empty string clears. */
+  cookiesBrowser?: string;
+  cookiesFile?: string;
+};
+
+export const checkYouTubeAccess = () => request<{ ok: boolean; message: string }>("/api/youtube/check", { method: "POST" });
 
 export type ModelOption = { id: string; name: string };
 
@@ -179,6 +200,14 @@ export const translateLibrary = () => request<{ queued: number }>("/api/translat
 export async function translateSong(videoId: string) {
   await request<{ ok: boolean }>(`/api/songs/${videoId}/translate`, { method: "POST" });
   songCache.delete(videoId);
+}
+
+export function setLyricsOffset(videoId: string, offset: number) {
+  return request<{ lyricsOffset: number }>(`/api/songs/${videoId}/offset`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ offset }),
+  });
 }
 
 export function invalidateSong(videoId: string) {

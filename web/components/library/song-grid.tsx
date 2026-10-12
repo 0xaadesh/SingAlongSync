@@ -32,15 +32,19 @@ const SongCard = memo(function SongCard({
   song,
   index,
   state,
+  compact = false,
 }: {
   song: Song;
   index: number;
   state: "idle" | "playing" | "paused";
+  /** Inside the recently-played row: no delete button, rendered as a plain div. */
+  compact?: boolean;
 }) {
   const art = artworkUrl(song);
+  const Wrapper = compact ? "div" : "li";
   return (
     // content-visibility skips rendering off-screen cards in large libraries
-    <li className="group/card relative [contain-intrinsic-size:auto_240px] [content-visibility:auto]">
+    <Wrapper className="group/card relative [contain-intrinsic-size:auto_240px] [content-visibility:auto]">
       <button
         type="button"
         onClick={() => player.play(song)}
@@ -82,8 +86,8 @@ const SongCard = memo(function SongCard({
         </p>
         <Marquee className="text-[13px] text-muted">{song.artist}</Marquee>
       </button>
-      <DeleteButton song={song} />
-    </li>
+      {!compact && <DeleteButton song={song} />}
+    </Wrapper>
   );
 });
 
@@ -123,5 +127,30 @@ export function SongGridSkeleton() {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Horizontal row of the songs played most recently in this browser. */
+export function RecentlyPlayed({ songs }: { songs: Song[] }) {
+  const { song: current, playing } = usePlayer();
+  if (!songs.length) return null;
+  return (
+    <section aria-labelledby="recent-heading" className="mb-8">
+      <h2 id="recent-heading" className="mb-3 text-[15px] font-semibold text-muted">
+        Recently played
+      </h2>
+      <ul className="-mx-5 flex snap-x gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {songs.map((song, i) => (
+          <li key={song.videoId} className="w-[132px] shrink-0 snap-start sm:w-[148px]">
+            <SongCard
+              song={song}
+              index={i}
+              state={current?.videoId === song.videoId ? (playing ? "playing" : "paused") : "idle"}
+              compact
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

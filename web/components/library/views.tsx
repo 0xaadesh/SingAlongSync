@@ -13,11 +13,12 @@ import {
   songMatches,
   type Collection,
 } from "@/lib/catalog";
+import { historyStore } from "@/lib/history";
 import { artistAvatarStore, libraryStore } from "@/lib/library";
 import { useStore } from "@/lib/store";
 import { useSearchQuery } from "@/lib/use-search";
 import { Marquee } from "@/components/ui/marquee";
-import { SongGrid, SongGridSkeleton } from "./song-grid";
+import { RecentlyPlayed, SongGrid, SongGridSkeleton } from "./song-grid";
 import {
   countLabel,
   EmptyLibraryState,
@@ -71,9 +72,15 @@ export function SongsView() {
 function SongsSection({ songs }: { songs: Song[] }) {
   const { query, searching } = useSearchQuery();
   const shown = useMemo(() => songs.filter((s) => songMatches(s, query)), [songs, query]);
+  const history = useStore(historyStore);
+  const recent = useMemo(() => {
+    const byId = new Map(songs.map((s) => [s.videoId, s]));
+    return history.map((id) => byId.get(id)).filter((s): s is Song => !!s);
+  }, [songs, history]);
   return (
     <>
       <PageHeading title="Songs" count={countLabel(shown.length, songs.length, "song", searching)} />
+      {!searching && <RecentlyPlayed songs={recent} />}
       {shown.length ? <SongGrid songs={shown} /> : <NoMatchesState query={query} noun="songs" />}
     </>
   );

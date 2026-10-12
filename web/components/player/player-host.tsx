@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { initHistory } from "@/lib/history";
 import { player, playerStore } from "@/lib/player";
 
 function isTyping(target: EventTarget | null) {
@@ -11,8 +12,10 @@ function isTyping(target: EventTarget | null) {
 /** Owns the app's single <audio> element, global shortcuts and the tab title. */
 export function PlayerHost() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const vocalsRef = useRef<HTMLAudioElement>(null);
 
-  useEffect(() => player.attach(audioRef.current!), []);
+  useEffect(() => player.attach(audioRef.current!, vocalsRef.current!), []);
+  useEffect(() => initHistory(), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -44,6 +47,18 @@ export function PlayerHost() {
         case "M":
           player.toggleMute();
           break;
+        case "k":
+        case "K":
+          player.setKaraoke(!playerStore.get().karaoke);
+          break;
+        case "[":
+          if (!sheetOpen) return;
+          player.setLyricsOffset(playerStore.get().lyricsOffset - 0.1);
+          break;
+        case "]":
+          if (!sheetOpen) return;
+          player.setLyricsOffset(playerStore.get().lyricsOffset + 0.1);
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -65,5 +80,11 @@ export function PlayerHost() {
     });
   }, []);
 
-  return <audio ref={audioRef} preload="auto" hidden />;
+  return (
+    <>
+      <audio ref={audioRef} preload="auto" hidden />
+      {/* Guide vocals for karaoke mode, kept in sync with the main element */}
+      <audio ref={vocalsRef} preload="auto" hidden />
+    </>
+  );
 }

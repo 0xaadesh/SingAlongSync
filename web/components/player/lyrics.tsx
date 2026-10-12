@@ -5,7 +5,17 @@ import type { KaraokeLine, Word } from "@/lib/api";
 import { player } from "@/lib/player";
 
 type Item =
-  | { kind: "line"; start: number; end: number; words: Word[]; lineIndex: number }
+  | {
+      kind: "line";
+      start: number;
+      end: number;
+      words: Word[];
+      /** Pronunciation words with timings borrowed from the original words, if any. */
+      romanized: Word[] | null;
+      /** Timing for every fillable element in DOM order: original words, then romanised. */
+      parts: Word[];
+      lineIndex: number;
+    }
   | { kind: "gap"; start: number; end: number };
 
 const INTRO_GAP = 3;
@@ -36,14 +46,41 @@ function timedTokens(line: KaraokeLine): Word[] {
   return out;
 }
 
-function buildItems(lines: KaraokeLine[]): Item[] {
+/**
+ * Give each pronunciation word the timing of the original word it stands for. Same word
+ * count pairs them one to one; otherwise each romanised word covers its share of the
+ * line's words by position.
+ */
+function romanizedTokens(text: string, words: Word[]): Word[] {
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (!parts.length || !words.length) return [];
+  if (parts.length === words.length) return parts.map((word, i) => ({ word, start: words[i].start, end: words[i].end }));
+  return parts.map((word, i) => {
+    const first = words[Math.min(Math.floor((i / parts.length) * words.length), words.length - 1)];
+    const last = words[Math.min(Math.ceil(((i + 1) / parts.length) * words.length) - 1, words.length - 1)];
+    return { word, start: first.start, end: Math.max(last.end, first.start) };
+  });
+}
+
+function buildItems(lines: KaraokeLine[], romanizations?: Record<string, string> | null): Item[] {
   const items: Item[] = [];
   lines.forEach((line, i) => {
     const prevEnd = i === 0 ? 0 : lines[i - 1].end;
     if (line.start - prevEnd >= (i === 0 ? INTRO_GAP : BREAK_GAP)) {
       items.push({ kind: "gap", start: i === 0 ? 0 : prevEnd + 0.3, end: line.start - 0.2 });
     }
-    items.push({ kind: "line", start: line.start, end: line.end, words: timedTokens(line), lineIndex: i });
+    const words = timedTokens(line);
+    const text = romanizations?.[i];
+    const romanized = text ? romanizedTokens(text, words) : null;
+    items.push({
+      kind: "line",
+      start: line.start,
+      end: line.end,
+      words,
+      romanized,
+      parts: romanized ? [...words, ...romanized] : words,
+      lineIndex: i,
+    });
   });
   return items;
 }
@@ -71,15 +108,36 @@ type LyricsProps = {
   /** English for non-English lines, keyed by line index. */
   translations?: Record<string, string> | null;
   showTranslations?: boolean;
+  /** Latin-letter pronunciation for non-Latin-script lines, keyed by line index. */
+  romanizations?: Record<string, string> | null;
+  showRomanizations?: boolean;
+  /** Seconds to shift the lyrics by (positive = lyrics earlier). */
+  offset?: number;
 };
 
 /**
  * React renders the lines once. Everything per-frame (active line, word fill, scroll
  * position) is applied imperatively from the playback clock.
  */
-export const Lyrics = memo(function Lyrics({ lines, active, translations, showTranslations = true }: LyricsProps) {
-  const items = useMemo(() => buildItems(lines), [lines]);
+export const Lyrics = memo(function Lyrics({
+  lines,
+  active,
+  translations,
+  showTranslations = true,
+  romanizations,
+  showRomanizations = true,
+  offset = 0,
+}: LyricsProps) {
+  const items = useMemo(() => buildItems(lines, romanizations), [lines, romanizations]);
   const viewportRef = useRef<HTMLDivElement>(null);
+  // Read by the clock callback, so changing the offset doesn't rebuild the engine
+  const offsetRef = useRef(offset);
+  offsetRef.current = offset;
+
+  // Re-place the lyrics right away when the offset changes, even while paused.
+  useEffect(() => {
+    if (active) player.resync();
+  }, [offset, active]);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -150,7 +208,7 @@ export const Lyrics = memo(function Lyrics({ lines, active, translations, showTr
       for (let k = 0; k < nodes.length; k++) {
         let p: number;
         if (item.kind === "line") {
-          const w = item.words[k];
+          const w = item.parts[k];
           p = clamp01((t - w.start) / Math.max(w.end - w.start, 0.05));
         } else {
           // Three breathing dots fill one after another across the break.
@@ -166,7 +224,8 @@ export const Lyrics = memo(function Lyrics({ lines, active, translations, showTr
     };
 
     let first = true;
-    const onTime = (t: number) => {
+    const onTime = (playback: number) => {
+      const t = playback + offsetRef.current;
       setActive(findActive(items, t), first);
       first = false;
       if (current >= 0) paintActive(t);
@@ -253,7 +312,7 @@ export const Lyrics = memo(function Lyrics({ lines, active, translations, showTr
       const item = items[Number(el.dataset.index)];
       if (item.kind !== "line") return;
       endBrowse();
-      player.seek(item.start);
+      player.seek(item.start - offsetRef.current);
       player.resume();
     };
 
@@ -294,6 +353,7 @@ export const Lyrics = memo(function Lyrics({ lines, active, translations, showTr
       role="region"
       aria-label="Lyrics"
       data-translations={showTranslations}
+      data-romanizations={showRomanizations}
       className="lyrics-viewport relative h-full overflow-hidden"
     >
       <div ref={listRef} className="lyrics-list">
@@ -311,6 +371,17 @@ export const Lyrics = memo(function Lyrics({ lines, active, translations, showTr
                   </span>{" "}
                 </span>
               ))}
+              {item.romanized && (
+                <span lang="en" className="lyric-romanized block pt-[0.25em] text-[0.56em] leading-snug font-semibold tracking-normal">
+                  {item.romanized.map((w, k) => (
+                    <span key={k}>
+                      <span data-part className="lyric-word lyric-rword">
+                        {w.word}
+                      </span>{" "}
+                    </span>
+                  ))}
+                </span>
+              )}
               {translations?.[item.lineIndex] && (
                 <span lang="en" className="lyric-translation block pt-[0.3em] text-[0.52em] leading-snug font-semibold tracking-normal">
                   {translations[item.lineIndex]}
