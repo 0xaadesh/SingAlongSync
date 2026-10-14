@@ -21,6 +21,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: "#0a0a0b",
   colorScheme: "dark",
+  // Draw under notches and the home indicator; layouts pad with env(safe-area-inset-*)
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

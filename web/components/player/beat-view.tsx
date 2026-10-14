@@ -127,7 +127,7 @@ export function BeatView({
   })();
 
   return (
-    <div className="flex h-full flex-col justify-center gap-6 py-6">
+    <div className="flex h-full flex-col justify-center gap-4 py-3 sm:gap-6 sm:py-6">
       <div>
         <div className="mb-2 flex items-baseline justify-between px-1 text-[12px] font-medium text-white/50 tabular-nums">
           <span>
@@ -142,12 +142,13 @@ export function BeatView({
         <BeatStrip cells={cells} active={active} />
       </div>
 
-      <div className="flex items-start gap-4">
+      {/* Phones: the script switch sits under the line instead of squeezing it */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
         <p className="min-h-[1.4em] min-w-0 flex-1 px-1 text-[clamp(1.25rem,2.2vw,1.75rem)] leading-snug font-bold text-white/90 text-balance">
           {line ?? <span className="text-white/30">♪</span>}
         </p>
         {hasRomanized && (
-          <div role="radiogroup" aria-label="Lyrics script" className="flex shrink-0 gap-0.5 rounded-full bg-white/[0.08] p-1">
+          <div role="radiogroup" aria-label="Lyrics script" className="flex shrink-0 gap-0.5 self-start rounded-full bg-white/[0.08] p-1">
             {[
               { id: false, label: "Original" },
               { id: true, label: "Romanised" },
@@ -169,9 +170,10 @@ export function BeatView({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-4">
+      {/* Phones show the current and next chord side by side; wider screens all four */}
+      <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:gap-4">
         {upcoming.map((u, i) => (
-          <ChordCard key={`${u.chord}-${i}`} chord={u.chord} current={u.current} />
+          <ChordCard key={`${u.chord}-${i}`} chord={u.chord} current={u.current} className={i >= 2 ? "max-sm:hidden" : ""} />
         ))}
       </div>
     </div>
@@ -237,7 +239,45 @@ const BeatStrip = memo(function BeatStrip({ cells, active }: { cells: Cell[]; ac
       }, BROWSE_IDLE_MS);
     };
 
+    // Touch (and mouse) drag scrolls the strip too; a drag never counts as a beat tap
+    let drag: { id: number; x: number; offset: number; moved: boolean } | null = null;
+    let suppressClick = false;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      drag = { id: e.pointerId, x: e.clientX, offset, moved: false };
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!drag || drag.id !== e.pointerId) return;
+      const dx = e.clientX - drag.x;
+      if (!drag.moved && Math.abs(dx) < 6) return;
+      if (!drag.moved) {
+        drag.moved = true;
+        viewport.setPointerCapture(e.pointerId);
+      }
+      browsing = true;
+      clearTimeout(browseTimer);
+      const min = viewport.clientWidth - strip.scrollWidth;
+      offset = Math.max(Math.min(0, min), Math.min(0, drag.offset + dx));
+      strip.style.transition = "none";
+      strip.style.transform = `translate3d(${offset}px, 0, 0)`;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (!drag || drag.id !== e.pointerId) return;
+      if (drag.moved) {
+        suppressClick = true;
+        browseTimer = window.setTimeout(() => {
+          browsing = false;
+          place(false);
+        }, BROWSE_IDLE_MS);
+      }
+      drag = null;
+    };
+
     const onClick = (e: MouseEvent) => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
       const el = (e.target as HTMLElement).closest<HTMLElement>("[data-beat]");
       if (!el) return;
       browsing = false;
@@ -249,6 +289,10 @@ const BeatStrip = memo(function BeatStrip({ cells, active }: { cells: Cell[]; ac
     const ro = new ResizeObserver(() => place(true));
     ro.observe(viewport);
     viewport.addEventListener("wheel", onWheel, { passive: false });
+    viewport.addEventListener("pointerdown", onPointerDown);
+    viewport.addEventListener("pointermove", onPointerMove);
+    viewport.addEventListener("pointerup", onPointerUp);
+    viewport.addEventListener("pointercancel", onPointerUp);
     strip.addEventListener("click", onClick);
     const unsubscribe = player.subscribeTime(onTime);
     return () => {
@@ -256,6 +300,10 @@ const BeatStrip = memo(function BeatStrip({ cells, active }: { cells: Cell[]; ac
       ro.disconnect();
       clearTimeout(browseTimer);
       viewport.removeEventListener("wheel", onWheel);
+      viewport.removeEventListener("pointerdown", onPointerDown);
+      viewport.removeEventListener("pointermove", onPointerMove);
+      viewport.removeEventListener("pointerup", onPointerUp);
+      viewport.removeEventListener("pointercancel", onPointerUp);
       strip.removeEventListener("click", onClick);
     };
   }, [cells, active]);
@@ -293,7 +341,7 @@ function blackX(semitone: number) {
   return whiteBefore * KEY_W - BLACK_W / 2;
 }
 
-function ChordCard({ chord, current }: { chord: string; current: boolean }) {
+function ChordCard({ chord, current, className = "" }: { chord: string; current: boolean; className?: string }) {
   const voicing = pianoVoicing(chord);
   const pressed = new Set(voicing?.keys ?? []);
   const width = KEY_W * 14;
@@ -301,10 +349,18 @@ function ChordCard({ chord, current }: { chord: string; current: boolean }) {
   return (
     <div
       data-current={current}
-      className="chord-card rounded-[16px] bg-white/[0.07] p-3 transition-[opacity,background-color] duration-200 data-[current=true]:bg-white/[0.14]"
+      className={`chord-card min-w-0 rounded-[16px] bg-white/[0.07] p-2.5 transition-[opacity,background-color] duration-200 data-[current=true]:bg-white/[0.14] sm:p-3 ${className}`}
     >
-      <p className="mb-2 text-[16px] font-bold">{chord}</p>
-      <svg viewBox={`0 0 ${width} ${KEY_H}`} width={width} height={KEY_H} role="img" aria-label={`Piano: ${chord}`}>
+      <p className="mb-2 text-[15px] font-bold sm:text-[16px]">{chord}</p>
+      {/* Scales down to fit its card on phones */}
+      <svg
+        viewBox={`0 0 ${width} ${KEY_H}`}
+        width={width}
+        height={KEY_H}
+        role="img"
+        aria-label={`Piano: ${chord}`}
+        className="h-auto w-full max-w-full sm:w-auto"
+      >
         {[0, 1].map((octave) =>
           WHITE_KEYS.map((semitone, i) => {
             const note = octave * 12 + semitone;

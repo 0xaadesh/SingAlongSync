@@ -51,7 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <>
       <PlayerHost />
-      <header className="sticky top-0 z-30 bg-bg/80 backdrop-blur-xl backdrop-saturate-150">
+      <header className="sticky top-0 z-30 bg-bg/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl backdrop-saturate-150">
         <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-3 px-5 sm:gap-4 sm:px-8 lg:px-12">
           <Link href="/" aria-label="SingAlongSync home" className="flex shrink-0 items-center gap-2.5 rounded-[10px]">
             <span className="grid size-8 place-items-center rounded-[10px] bg-accent text-white shadow-[0_4px_14px_-4px_rgb(250_45_72/0.6)]">

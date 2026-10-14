@@ -4,6 +4,7 @@ import { Check, FileUp, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { countLrcLines, searchLrclib, setSongLyrics, type LrclibResult } from "@/lib/api";
 import { formatTime } from "@/lib/format";
+import { trackJob } from "@/lib/jobs";
 import { useStore } from "@/lib/store";
 import { toast } from "@/lib/toast";
 import { closeLyricsDialog, lyricsDialogStore, type LyricsTarget } from "@/lib/ui";
@@ -68,9 +69,11 @@ function LyricsPicker({ song }: { song: LyricsTarget }) {
     setSubmitting(true);
     setError(null);
     try {
-      await setSongLyrics(song.videoId, body);
+      const { job } = await setSongLyrics(song.videoId, body);
+      // The player shows this job's progress in place of the old lyrics
+      trackJob(job);
       closeLyricsDialog();
-      toast({ title: "Syncing the new lyrics", description: "About a minute. They'll appear when ready." });
+      toast({ title: "Syncing the new lyrics", description: "Follow the progress in the player. About a minute." });
     } catch (e) {
       setError((e as Error).message);
       setSubmitting(false);

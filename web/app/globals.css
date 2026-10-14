@@ -545,6 +545,35 @@ body {
   }
 }
 
+/* Phones: the same menus slide up as bottom sheets */
+
+.sheet-backdrop {
+  transition: opacity 200ms ease;
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+.sheet-panel {
+  transition: translate 320ms var(--ease-drawer);
+
+  @starting-style {
+    translate: 0 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel {
+    transition: opacity 150ms ease;
+
+    @starting-style {
+      translate: 0 0;
+      opacity: 0;
+    }
+  }
+}
+
 /* ---------- Lyric translations ---------- */
 
 .lyric-translation {
@@ -647,6 +676,8 @@ body {
 
 .beat-viewport {
   mask-image: linear-gradient(to right, transparent 0, #000 4%, #000 92%, transparent 100%);
+  /* Horizontal swipes browse the strip (handled in script); vertical ones stay with the page */
+  touch-action: pan-y;
 }
 
 .beat-strip {

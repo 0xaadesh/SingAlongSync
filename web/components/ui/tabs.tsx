@@ -23,7 +23,13 @@ export function Tabs({ tabs, value, onChange, label, idPrefix }: TabsProps) {
     const list = listRef.current;
     const pill = pillRef.current;
     const active = list?.querySelector<HTMLElement>("[aria-selected='true']");
-    if (!list || !pill || !active) return;
+    if (!list || !pill) return;
+    // The value can be one these tabs don't offer (e.g. a view chosen elsewhere)
+    pill.style.opacity = active ? "1" : "0";
+    if (!active) {
+      placed.current = false;
+      return;
+    }
     const place = () => {
       // First placement jumps; later ones slide
       pill.style.transition = placed.current ? "" : "none";

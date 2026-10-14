@@ -17,7 +17,7 @@ export function Toaster() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex flex-col items-center gap-2 px-3 transition-[translate] duration-300 ease-[var(--ease-out)]"
+      className="pointer-events-none fixed inset-x-0 bottom-[max(env(safe-area-inset-bottom),1.5rem)] z-[60] flex flex-col items-center gap-2 px-3 transition-[translate] duration-300 ease-[var(--ease-out)]"
       style={{ translate: `0 ${lifted ? -80 : 0}px` }}
     >
       {toasts.map((t) => (

@@ -44,12 +44,65 @@ function HeaderButton({
       aria-label={label}
       title={label}
       {...props}
-      className={`pressable relative grid size-10 place-items-center rounded-full ${
+      className={`pressable relative grid size-9 place-items-center rounded-full sm:size-10 ${
         active ? "bg-white text-black hover:bg-white/85" : "bg-white/10 text-white/90 hover:bg-white/20"
       }`}
     >
       {children}
     </button>
+  );
+}
+
+/** Icon over a label, for the player's bottom bar on phones and tablets. */
+export function BarButton({
+  label,
+  active,
+  children,
+  ...props
+}: { label: string; active?: boolean; children: ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      {...props}
+      className={`pressable flex h-14 w-full flex-col items-center justify-center gap-1 rounded-[14px] text-[11px] font-medium transition-colors duration-150 ${
+        active ? "text-white" : "text-white/55 hover:text-white/85"
+      }`}
+    >
+      {children}
+      <span className="relative">
+        {label}
+        {/* Marks a feature that's switched on */}
+        {active && <span aria-hidden className="absolute -top-0.5 -right-2 size-1.5 rounded-full bg-accent" />}
+      </span>
+    </button>
+  );
+}
+
+/** Where a menu's trigger lives: the desktop header, or the bottom bar below desktop width. */
+export type MenuVariant = "header" | "bar";
+
+function MenuTrigger({
+  variant,
+  label,
+  barLabel,
+  active,
+  icon,
+  ...props
+}: {
+  variant: MenuVariant;
+  label: string;
+  barLabel: string;
+  active?: boolean;
+  icon: ReactNode;
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return variant === "bar" ? (
+    <BarButton label={barLabel} aria-label={label} active={active} {...props}>
+      {icon}
+    </BarButton>
+  ) : (
+    <HeaderButton label={label} active={active} {...props}>
+      {icon}
+    </HeaderButton>
   );
 }
 
@@ -69,7 +122,7 @@ function MenuRow({ title, hint, control }: { title: string; hint?: string; contr
 // Karaoke
 // ---------------------------------------------------------------------------
 
-export function KaraokeMenu({ detail }: { detail: SongDetail }) {
+export function KaraokeMenu({ detail, variant = "header" }: { detail: SongDetail; variant?: MenuVariant }) {
   const { karaoke, vocalLevel, vocalsOnly } = usePlayer();
   const available = !!detail.stems;
 
@@ -77,10 +130,16 @@ export function KaraokeMenu({ detail }: { detail: SongDetail }) {
     <Popover
       label="Karaoke"
       width={300}
+      className={variant === "bar" ? "flex-1" : ""}
       trigger={(props) => (
-        <HeaderButton label="Karaoke" active={(karaoke || vocalsOnly) && available} {...props}>
-          <Mic2 size={18} strokeWidth={2} />
-        </HeaderButton>
+        <MenuTrigger
+          variant={variant}
+          label="Karaoke"
+          barLabel="Karaoke"
+          active={(karaoke || vocalsOnly) && available}
+          icon={<Mic2 size={variant === "bar" ? 20 : 18} strokeWidth={2} />}
+          {...props}
+        />
       )}
     >
       {() => (
@@ -135,7 +194,7 @@ function hasNonLatin(text: string) {
   return /[^\u0000-ɏ\s\d\p{P}\p{S}]/u.test(text);
 }
 
-export function LyricsMenu({ detail }: { detail: SongDetail }) {
+export function LyricsMenu({ detail, variant = "header" }: { detail: SongDetail; variant?: MenuVariant }) {
   const { lyricsOffset } = usePlayer();
   const showTranslations = useStore(showTranslationsStore);
   const showRomanizations = useStore(showRomanizationsStore);
@@ -204,10 +263,16 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
     <Popover
       label="Lyrics options"
       width={320}
+      className={variant === "bar" ? "flex-1" : ""}
       trigger={(props) => (
-        <HeaderButton label="Lyrics options" active={(showTranslations && translationCount > 0) || lyricsOffset !== 0} {...props}>
-          <Languages size={18} strokeWidth={2} />
-        </HeaderButton>
+        <MenuTrigger
+          variant={variant}
+          label="Lyrics options"
+          barLabel="Options"
+          active={(showTranslations && translationCount > 0) || lyricsOffset !== 0}
+          icon={<Languages size={variant === "bar" ? 20 : 18} strokeWidth={2} />}
+          {...props}
+        />
       )}
     >
       {(close) => (
@@ -343,7 +408,7 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
 // Up next
 // ---------------------------------------------------------------------------
 
-export function QueueMenu() {
+export function QueueMenu({ variant = "header" }: { variant?: MenuVariant }) {
   const state = usePlayer();
   const library = useStore(libraryStore).songs;
   const { songs, index } = queuePosition(state, library);
@@ -353,10 +418,15 @@ export function QueueMenu() {
     <Popover
       label="Up next"
       width={340}
+      className={variant === "bar" ? "flex-1" : ""}
       trigger={(props) => (
-        <HeaderButton label="Up next" {...props}>
-          <ListMusic size={18} strokeWidth={2} />
-        </HeaderButton>
+        <MenuTrigger
+          variant={variant}
+          label="Up next"
+          barLabel="Up next"
+          icon={<ListMusic size={variant === "bar" ? 20 : 18} strokeWidth={2} />}
+          {...props}
+        />
       )}
     >
       {(close) => (

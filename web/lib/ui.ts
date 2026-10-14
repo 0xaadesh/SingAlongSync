@@ -133,14 +133,15 @@ export function setShowSongFacts(show: boolean) {
 
 const VIEW_KEY = "sas:player-view";
 
-export type PlayerView = "lyrics" | "beats";
+export type PlayerView = "song" | "lyrics" | "beats";
 
-/** What the player's main area shows: synced lyrics, or the beat grid with chord diagrams. */
+/** What the player shows: the cover and controls, synced lyrics, or the beat grid with chord diagrams. */
 export const playerViewStore = createStore<PlayerView>("lyrics");
 
 export function initPlayerView() {
   try {
-    if (localStorage.getItem(VIEW_KEY) === "beats") playerViewStore.set("beats");
+    const stored = localStorage.getItem(VIEW_KEY);
+    if (stored === "song" || stored === "beats") playerViewStore.set(stored);
   } catch {
     // Storage unavailable; keep the default
   }

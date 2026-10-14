@@ -73,13 +73,15 @@ export function useJobs() {
   return state;
 }
 
+/** Show a job the server just accepted right away; the stream takes over from here. */
+export function trackJob(raw: Job) {
+  const job = withRetryAt(raw);
+  jobsStore.set((s) => ({ ...s, jobs: [job, ...s.jobs.filter((j) => j.id !== job.id)] }));
+}
+
 export async function submitJob(url: string) {
   const result = await createJob(url);
-  if (result.job) {
-    const job = withRetryAt(result.job);
-    // Show the card right away; the stream will take over from here.
-    jobsStore.set((s) => ({ ...s, jobs: [job, ...s.jobs.filter((j) => j.id !== job.id)] }));
-  }
+  if (result.job) trackJob(result.job);
   return result;
 }
 

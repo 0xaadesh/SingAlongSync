@@ -90,7 +90,7 @@ export function DownloadsMenu() {
       </button>
 
       {open && (
-        <div className="card-menu absolute top-12 right-0 z-40 w-[min(380px,calc(100vw-2rem))] rounded-[24px] bg-surface-2 p-2 shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_24px_56px_-12px_rgb(0_0_0/0.85)]">
+        <div className="card-menu absolute top-12 right-0 z-40 w-[min(380px,calc(100vw-2rem))] max-sm:fixed max-sm:inset-x-3 max-sm:top-[calc(3.75rem+env(safe-area-inset-top))] max-sm:w-auto max-sm:origin-top rounded-[24px] bg-surface-2 p-2 shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_24px_56px_-12px_rgb(0_0_0/0.85)]">
           <div className="flex items-center justify-between px-2.5 pt-1.5 pb-2">
             <p className="text-[13px] font-semibold text-muted">Downloads</p>
             {finished.length > 0 && (
