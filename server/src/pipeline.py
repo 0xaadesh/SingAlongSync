@@ -4,9 +4,8 @@ import subprocess
 import sys
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 
-import torch
-import whisperx
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -23,8 +22,6 @@ from src.status import read_status, write_json_atomic
 from src.lang import detect_lyrics_language
 from src.lyrics import LyricsServiceError, search_synced_lyrics, parse_lrc, strip_lrc_timestamps
 from src.youtube import extract_video_id, download_audio
-
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 console = Console()
 
@@ -150,8 +147,21 @@ class KaraokePipeline:
 
     def download_step(self):
         self.save_status({"stage": "downloading", "progress": 0})
+        log = lambda message: console.print(f"[dim]  {message}[/dim]")
+        # YouTube Music and iTunes lookups only need yt-dlp's basics, so they run while the
+        # audio downloads instead of after it
+        enrichment = None
 
-        with console.status("[bold cyan]📥 Downloading audio & metadata via yt-dlp...[/bold cyan]", spinner="dots"):
+        def on_metadata(metadata):
+            nonlocal enrichment
+            # Written before the audio arrives so the web UI can show the title early
+            self._write_metadata(metadata)
+            if enrichment is None:
+                log(f"yt-dlp: \"{metadata['title']}\" by {metadata['artist']}, {metadata['duration']}s")
+                enrichment = executor.submit(enrich_metadata, dict(metadata), self.work_dir, log)
+
+        with console.status("[bold cyan]📥 Downloading audio & metadata via yt-dlp...[/bold cyan]", spinner="dots"), \
+                ThreadPoolExecutor(max_workers=1) as executor:
             try:
                 download_audio(
                     self.url,
@@ -159,15 +169,10 @@ class KaraokePipeline:
                     self.video_id,
                     on_progress=self.report_progress,
                     on_retry=self.report_retry,
-                    # Written before the audio arrives so the web UI can show the title early
-                    on_metadata=self._write_metadata,
+                    on_metadata=on_metadata,
                 )
-                # yt-dlp gave the basics; YouTube Music and iTunes fill in the rest (never fatal)
-                metadata = self._read_metadata()
-                log = lambda message: console.print(f"[dim]  {message}[/dim]")
-                thumbnail = next((p.name for p in self.work_dir.glob("audio.*") if p.suffix != ".mp3"), "none")
-                log(f"yt-dlp: \"{metadata['title']}\" by {metadata['artist']}, {metadata['duration']}s; thumbnail {thumbnail}")
-                metadata = enrich_metadata(metadata, self.work_dir, log=log)
+                # Never raises: every enrichment source is optional
+                metadata = enrichment.result()
                 self._write_metadata(metadata)
                 self.save_status({"downloaded": True, "stage": "metadata_saved"})
             except Exception as e:
@@ -337,12 +342,18 @@ class KaraokePipeline:
         ]
 
         with console.status("[bold blue]Loading WhisperX model and alignment weights...[/bold blue]", spinner="aesthetic") as status:
+            # Imported here, not at the top: loading torch takes seconds and would delay
+            # every job's download for a step that comes last
+            import torch
+            import whisperx
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             audio = whisperx.load_audio(str(self.vocals_path))
             status.update(f"[bold blue]Initializing '{language_code}' alignment model...[/bold blue]")
-            model_a, metadata = whisperx.load_align_model(language_code=language_code, device=DEVICE)
+            model_a, metadata = whisperx.load_align_model(language_code=language_code, device=device)
 
             status.update("[bold blue]Executing millisecond-level word alignment...[/bold blue]")
-            result = whisperx.align(segments, model_a, metadata, audio, DEVICE)
+            result = whisperx.align(segments, model_a, metadata, audio, device)
 
         # One entry per lyric line with the original words, even when romanised text was aligned
         karaoke_data = build_karaoke(lines, original_tokens, align_tokens, result["segments"])
