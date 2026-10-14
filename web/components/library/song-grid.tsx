@@ -144,7 +144,8 @@ export function RecentlyPlayed({ songs }: { songs: Song[] }) {
       <h2 id="recent-heading" className="mb-3 text-[15px] font-semibold text-muted">
         Recently played
       </h2>
-      <ul className="-mx-5 flex snap-x gap-4 overflow-x-auto scroll-px-5 px-5 pb-2 sm:-mx-8 sm:scroll-px-8 sm:px-8 lg:-mx-12 lg:scroll-px-12 lg:px-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* Edge to edge on phones and tablets; on desktop it lines up with the grid and fades out */}
+      <ul className="-mx-5 flex snap-x gap-4 overflow-x-auto scroll-px-5 px-5 pb-2 sm:-mx-8 sm:scroll-px-8 sm:px-8 lg:mx-0 lg:scroll-px-0 lg:px-0 lg:[mask-image:linear-gradient(to_right,#000_calc(100%-64px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {songs.map((song, i) => (
           <li key={song.videoId} className="w-[132px] shrink-0 snap-start sm:w-[148px]">
             <SongCard
