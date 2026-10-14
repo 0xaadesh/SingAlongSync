@@ -32,7 +32,7 @@ TQDM_PERCENT = re.compile(rb"(\d{1,3})%\|")
 
 NO_LYRICS_MESSAGES = {
     "no_results": ("⚠ No lyrics found on LRCLIB.", "Step 2: No Lyrics"),
-    "no_duration_match": ("⚠ No close duration match found on LRCLIB.", "Step 2: No Match"),
+    "no_duration_match": ("⚠ No LRCLIB lyrics within 2 seconds of this song's length.", "Step 2: No Match"),
     "not_synced": ("⚠ Synced lyrics not available in the best match.", "Step 2: No Synced Lyrics"),
 }
 

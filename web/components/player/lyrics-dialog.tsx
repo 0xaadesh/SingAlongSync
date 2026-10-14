@@ -60,6 +60,11 @@ export function LyricsDialog() {
   );
 }
 
+/** Same rule as the server's automatic match: within 2 seconds of the song's length. */
+function durationMatches(lrclib: number, song: number) {
+  return Math.abs(lrclib - song) <= 2;
+}
+
 function LyricsPicker({ song }: { song: LyricsTarget }) {
   const [source, setSource] = useState<Source>("search");
   const [submitting, setSubmitting] = useState(false);
@@ -163,8 +168,8 @@ function SearchSource({
         .then((r) => {
           setResults(r);
           setError(null);
-          // Preselect the first synced result within a few seconds of the song's length
-          const best = r.find((x) => x.synced && x.duration != null && Math.abs(x.duration - song.duration) <= 3);
+          // Preselect the first synced result whose length matches the song
+          const best = r.find((x) => x.synced && x.duration != null && durationMatches(x.duration, song.duration));
           setSelected(best?.id ?? null);
         })
         .catch((e: Error) => !controller.signal.aborted && setError(e.message))
@@ -203,7 +208,7 @@ function SearchSource({
             {results.map((r) => {
               const isSelected = r.id === selected;
               const diff = r.duration != null ? Math.round(r.duration - song.duration) : null;
-              const close = diff !== null && Math.abs(diff) <= 3;
+              const close = r.duration != null && durationMatches(r.duration, song.duration);
               return (
                 <li key={r.id}>
                   <button
@@ -252,7 +257,7 @@ function SearchSource({
         )}
       </div>
 
-      <Footer hint="Green durations match the song within 3 seconds.">
+      <Footer hint="Green durations match the song within 2 seconds.">
         <button
           type="button"
           disabled={selected === null || submitting}

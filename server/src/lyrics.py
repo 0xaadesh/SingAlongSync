@@ -7,8 +7,9 @@ LRCLIB_SEARCH_URL = "https://lrclib.net/api/search"
 LRCLIB_HEADERS = {"User-Agent": "SingAlongSync/1.0"}
 LRC_LINE_PATTERN = r"\[(\d+):(\d+\.\d+)\](.*)"
 
-# How far (seconds) an LRCLIB track's duration may drift from the YouTube one.
-MAX_DURATION_DRIFT = 5
+# How far (seconds) an LRCLIB track's duration may be from the YouTube one. Tight, so a
+# different edit of the song isn't picked; uploads often differ by a second of silence.
+MAX_DURATION_DRIFT = 2
 # LRCLIB answers 429/5xx when busy; wait this long between attempts.
 RETRY_DELAYS = (1, 3, 6)
 
