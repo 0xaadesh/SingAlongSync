@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronDown, Search, TextQuote } from "lucide-react";
-import { useEffect, useRef, type PointerEvent } from "react";
-import { artworkUrl, imageCors, type Job, type SongDetail } from "@/lib/api";
+import { ChevronDown, RotateCw, Search, TextQuote } from "lucide-react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { analyzeSong, artworkUrl, imageCors, type Job, type SongDetail } from "@/lib/api";
 import { useJobs } from "@/lib/jobs";
 import { player, usePlayer } from "@/lib/player";
 import { useStore } from "@/lib/store";
+import { toast } from "@/lib/toast";
 import {
   openLyricsDialog,
   romanizedFirstStore,
@@ -247,11 +248,7 @@ export function PlayerSheet() {
                         active={sheetOpen}
                       />
                     ) : (
-                      <LyricsMessage>
-                        {detail.analysisStatus === "pending"
-                          ? "Finding the beat and chords…"
-                          : "The beat view isn't ready for this song yet."}
-                      </LyricsMessage>
+                      <BeatsUnavailable detail={detail} />
                     )}
                   </div>
                 ) : detail ? (
@@ -330,6 +327,55 @@ function LyricsSyncing({ job }: { job: Job }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const ANALYSIS_POLL_MS = 3000;
+
+/** No beats yet: still being found (refetched until they land), or failed with a retry. */
+function BeatsUnavailable({ detail }: { detail: SongDetail }) {
+  const pending = detail.analysisStatus === "pending";
+  const failed = detail.analysisStatus === "failed";
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!pending) return;
+    const id = setInterval(() => player.refreshDetail().catch(() => {}), ANALYSIS_POLL_MS);
+    return () => clearInterval(id);
+  }, [pending, detail.videoId]);
+
+  if (pending) return <LyricsMessage>Finding the beat and chords…</LyricsMessage>;
+
+  const retry = async () => {
+    setBusy(true);
+    try {
+      await analyzeSong(detail.videoId);
+      await player.refreshDetail();
+    } catch (e) {
+      toast({ title: "Couldn't start the analysis", description: (e as Error).message, tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col items-start justify-center gap-4">
+      <p className="text-2xl font-semibold text-white/60">
+        {failed ? "Couldn't find the beat for this song." : "The beat view isn't ready for this song yet."}
+      </p>
+      {failed && detail.analysisError && (
+        <p className="line-clamp-3 max-w-md text-[13px] text-white/45 break-words">{detail.analysisError}</p>
+      )}
+      <button
+        type="button"
+        onClick={retry}
+        disabled={busy}
+        className="pressable flex h-11 items-center gap-2 rounded-full bg-white px-5 text-[15px] font-semibold text-black hover:bg-white/85 disabled:opacity-60"
+      >
+        <RotateCw size={16} strokeWidth={2.25} className={busy ? "spin" : ""} />
+        {failed ? "Try again" : "Find the beat"}
+      </button>
     </div>
   );
 }

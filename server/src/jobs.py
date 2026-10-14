@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 
 from src import settings as settings_store
 from src.config import CLI_PATH, DOWNLOADS_DIR, SERVER_ROOT
+from src.gpu import GPU_LOCK
 from src.library import find_artwork, is_processed, read_metadata
 from src.status import read_status, write_json_atomic
 
@@ -259,11 +260,13 @@ class JobManager:
     def _worker(self):
         while True:
             video_id = self._queue.get()
-            with self._lock:
-                job = self._jobs.get(video_id)
-                if job is None or job.state != "queued":
-                    continue
-            self._run(job)
+            # Waits for a running key/chord analysis to finish; the job stays queued meanwhile
+            with GPU_LOCK:
+                with self._lock:
+                    job = self._jobs.get(video_id)
+                    if job is None or job.state != "queued":
+                        continue
+                self._run(job)
 
     def _run(self, job):
         work_dir = DOWNLOADS_DIR / job.id

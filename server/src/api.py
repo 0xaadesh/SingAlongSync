@@ -118,7 +118,17 @@ async def song_detail(video_id: str):
     song["analysisStatus"] = (
         "ready" if song["analysis"] else analysis.status(video_id) or ("failed" if analysis.error(video_id) else "none")
     )
+    song["analysisError"] = analysis.error(video_id) if song["analysisStatus"] == "failed" else None
     return song
+
+
+@app.post("/api/songs/{video_id}/analyze")
+def analyze_again(video_id: str):
+    """Queue key, chord and beat detection again, e.g. after it failed."""
+    if not is_valid_video_id(video_id) or not is_processed(DOWNLOADS_DIR / video_id):
+        raise HTTPException(status_code=404, detail="Song not found")
+    analysis.enqueue(video_id)
+    return {"ok": True}
 
 
 @app.delete("/api/songs/{video_id}")

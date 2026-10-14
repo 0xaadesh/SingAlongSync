@@ -57,6 +57,8 @@ export type SongDetail = Song & {
   /** Key and chords, detected in the background after processing. */
   analysis: SongAnalysis | null;
   analysisStatus: "ready" | "pending" | "failed" | "none";
+  /** Why the last key/chord/beat analysis failed; null unless analysisStatus is "failed". */
+  analysisError: string | null;
 };
 
 export type StepKey = "download" | "lyrics" | "separate" | "align" | "translate";
@@ -211,6 +213,9 @@ export type SettingsUpdate = Partial<Pick<Settings, "provider" | "model" | "tran
   /** Contents of a cookies.txt; the server saves it and points cookiesFile at it. */
   cookiesText?: string;
 };
+
+/** Queue key, chord and beat detection again for a song. */
+export const analyzeSong = (videoId: string) => request<{ ok: boolean }>(`/api/songs/${videoId}/analyze`, { method: "POST" });
 
 export const checkYouTubeAccess = () => request<{ ok: boolean; message: string }>("/api/youtube/check", { method: "POST" });
 

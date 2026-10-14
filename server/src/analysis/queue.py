@@ -6,10 +6,12 @@ analysed before this existed). Results go to downloads/<id>/analysis.json; while
 song is queued or running, its detail reports the analysis as pending.
 """
 import queue
+import sys
 import threading
 import time
 
 from src.config import DOWNLOADS_DIR
+from src.gpu import GPU_LOCK
 from src.status import read_status, write_json_atomic
 
 # 2: added beats, bar starts and BPM
@@ -93,9 +95,11 @@ class AnalysisQueue:
     def _worker(self):
         while True:
             video_id = self._queue.get()
-            log = lambda m, vid=video_id: print(f"[analysis {vid}] {m}", flush=True)
+            log = lambda m, vid=video_id: console_log(f"[analysis {vid}] {m}")
             try:
-                analyze_song(DOWNLOADS_DIR / video_id, log=log)
+                # Never alongside a processing job: both need most of the GPU's memory
+                with GPU_LOCK:
+                    analyze_song(DOWNLOADS_DIR / video_id, log=log)
             except Exception as e:
                 log(f"failed: {e}")
                 with self._lock:
@@ -103,6 +107,12 @@ class AnalysisQueue:
             finally:
                 with self._lock:
                     self._pending.discard(video_id)
+
+
+def console_log(text):
+    """Print to the server console, surviving consoles that can't show every character."""
+    encoding = sys.stdout.encoding or "utf-8"
+    print(text.encode(encoding, errors="replace").decode(encoding), flush=True)
 
 
 def read_analysis(song_dir):
