@@ -199,7 +199,6 @@ export function JobSteps({ job }: { job: Job }) {
       {steps.map((step, i) => {
         const label = STEP_LABELS[step.key];
         const isLast = i === steps.length - 1;
-        const live = step.status === "active" ? (retry ?? job.log) : null;
         const detail =
           step.status === "skipped"
             ? "Skipped: no synced lyrics"
@@ -251,16 +250,9 @@ export function JobSteps({ job }: { job: Job }) {
               >
                 {detail}
               </p>
-              {/* What the step is doing right now: a retry countdown, or the latest log line */}
-              {live && (
-                <p
-                  className={`mt-1 line-clamp-2 text-[12px] tabular-nums break-words ${
-                    retry ? "text-warning" : "font-mono text-subtle"
-                  }`}
-                  title={live}
-                >
-                  {live}
-                </p>
+              {/* A step waiting to retry says why and when */}
+              {step.status === "active" && retry && (
+                <p className="mt-1 text-[12px] text-warning tabular-nums [overflow-wrap:anywhere]">{retry}</p>
               )}
             </div>
           </li>

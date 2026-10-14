@@ -85,8 +85,6 @@ export type Job = {
   retryIn: number | null;
   /** Client clock time (seconds) the retry is due; filled in from retryIn on arrival. */
   retryAt?: number | null;
-  /** Latest line of the processing log while running. */
-  log: string | null;
   /** Jobs ahead of this one; null unless queued. */
   queuePosition: number | null;
 };

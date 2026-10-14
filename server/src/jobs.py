@@ -26,8 +26,6 @@ POLL_INTERVAL = 0.4
 # tqdm redraws its bar many times a second; echo it to the console only every 10%.
 TQDM_PERCENT = re.compile(r"(\d{1,3})%\|")
 LINE_BREAK = re.compile(r"[\r\n]+")
-# Rich panel borders and padding around the CLI's messages
-BOX_CHARS = "│┃╭╮╰╯─━┏┓┗┛ "
 
 # Pipeline steps in order: (key, files that prove the step is done, status.json stage while running)
 STEPS = [
@@ -56,8 +54,6 @@ class Job:
     preview: dict = field(default_factory=dict)
     # Whether AI translation is part of this job (settings at submit time)
     translate: bool = False
-    # Latest readable line of CLI output while running
-    log_line: str | None = None
 
     def to_dict(self, queue_position=None):
         progress = dict(self.progress)
@@ -77,7 +73,6 @@ class Job:
             "error": self.error,
             # Seconds until a waiting step retries (relative, so client clock skew doesn't matter)
             "retryIn": max(0.0, retry_at - time.time()) if running and retry_at else None,
-            "log": self.log_line if running else None,
             # Jobs ahead of this one (the running job included); None unless queued
             "queuePosition": queue_position,
             **progress,
@@ -154,15 +149,7 @@ def console_log(video_id, message):
     stream.flush()
 
 
-def readable_line(line):
-    """The text of a CLI output line, or None for borders, blanks and progress bars."""
-    if TQDM_PERCENT.search(line):
-        return None
-    text = line.strip(BOX_CHARS)
-    return text[:200] if any(c.isalnum() for c in text) else None
-
-
-def tee_output(proc, log, video_id, on_line=None):
+def tee_output(proc, log, video_id):
     """Copy the CLI's output into job.log verbatim and line-by-line to the server console."""
     pending = ""
     last_bucket = None
@@ -176,8 +163,6 @@ def tee_output(proc, log, video_id, on_line=None):
             line = line.rstrip()
             if not line:
                 continue
-            if on_line and (text := readable_line(line)):
-                on_line(text)
             if match := TQDM_PERCENT.search(line):
                 bucket = int(match.group(1)) // 10
                 if bucket == last_bucket:
@@ -308,10 +293,8 @@ class JobManager:
             )
             job.state = "running"
             job.started_at = time.time()
-            job.log_line = None
             self._bump()
-        on_line = lambda text: self._set_log(job, text)
-        tee = threading.Thread(target=tee_output, args=(job.process, log, job.id, on_line), daemon=True)
+        tee = threading.Thread(target=tee_output, args=(job.process, log, job.id), daemon=True)
         tee.start()
 
         while job.process.poll() is None:
@@ -337,12 +320,6 @@ class JobManager:
         console_log(job.id, f"{job.state} in {took}" + (f": {job.error}" if job.error else ""))
         if job.state == "done" and self._on_done:
             self._on_done(job.id)
-
-    def _set_log(self, job, text):
-        with self._lock:
-            if job.log_line != text:
-                job.log_line = text
-                self._bump()
 
     def _refresh(self, job, running):
         progress = read_progress(job.id, running, translate=job.translate)
