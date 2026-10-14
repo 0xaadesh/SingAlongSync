@@ -13,7 +13,7 @@
 
 <video src="https://github.com/user-attachments/assets/1d4e6b07-aa70-422a-8471-a0f9f89d1bb9" controls width="100%"></video>
 
-_[Watch the web app demo](https://github.com/user-attachments/assets/1d4e6b07-aa70-422a-8471-a0f9f89d1bb9) · [Watch the CLI demo](https://github.com/user-attachments/assets/317f310f-c52e-434c-95ad-9657a1131856)_
+_[Watch the web app demo](https://github.com/user-attachments/assets/1d4e6b07-aa70-422a-8471-a0f9f89d1bb9) · [Watch adding a song](https://github.com/user-attachments/assets/41a27458-c6f1-421a-a347-4c5be5f71d45) · [Watch the CLI demo](https://github.com/user-attachments/assets/317f310f-c52e-434c-95ad-9657a1131856)_
 
 It downloads the audio, separates the vocals with **Demucs**, fetches synced lyrics from **LRCLIB** and times every word with **WhisperX**. Use it from the terminal, or through the included Apple Music-style web app.
 
@@ -62,6 +62,13 @@ uv run src/cli.py "https://music.youtube.com/watch?v=eZCWyFNV_ZM"
 Output goes to `server/downloads/<video_id>/`, which the web app reads too. Steps that already have output are skipped, so a failed run resumes where it stopped.
 
 ## 📖 Usage
+
+<details>
+<summary><b>Watch adding a song</b> (search, pick, live progress)</summary>
+
+<video src="https://github.com/user-attachments/assets/41a27458-c6f1-421a-a347-4c5be5f71d45" controls width="100%"></video>
+
+</details>
 
 - **Add a song:** click **Add song**, then search YouTube Music or paste a link. An album or playlist link lets you pick the tracks to queue.
 - **Play:** `Space` play/pause, `←`/`→` seek 5 s, `M` mute, `K` karaoke mode, `[`/`]` shift lyrics 0.1 s, `/` search, `Esc` close the player.
