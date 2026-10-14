@@ -250,7 +250,8 @@ def save_cookies_text(text):
     if not lines[0].startswith(("# Netscape HTTP Cookie File", "# HTTP Cookie File")):
         lines.insert(0, NETSCAPE_HEADER)
     settings_store.COOKIES_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return str(settings_store.COOKIES_PATH)
+    # By name, resolved against the data folder (see settings.cookies_file)
+    return settings_store.COOKIES_PATH.name
 
 
 @app.get("/api/settings")

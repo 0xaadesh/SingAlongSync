@@ -16,13 +16,13 @@ import numpy as np
 import requests
 import torch
 
-from src.config import SERVER_ROOT
+from src.config import CACHE_DIR
 
 from .btc.btc_model import BTC_model
 from .skey.chromanet import ChromaNet
 from .skey.hcqt import VQT, CropCQT
 
-MODELS_DIR = SERVER_ROOT / "cache" / "models"
+MODELS_DIR = CACHE_DIR / "models"
 
 WEIGHTS = {
     "btc": {

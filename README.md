@@ -38,6 +38,23 @@ It downloads the audio, separates the vocals with **Demucs**, fetches synced lyr
 
 ## 🚀 Quick Start
 
+### With Docker
+
+With [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL 2 on Windows) and an NVIDIA driver installed:
+
+```bash
+docker compose up -d --build
+```
+
+Open **http://localhost:3000**. The first build downloads PyTorch and takes a while, and the first song downloads the AI models.
+
+- **Your library stays on your machine:** songs, caches, settings and `cookies.txt` are kept in `server/` on the host (mounted into the container), exactly where a non-Docker run keeps them. Model downloads go to the `models` Docker volume.
+- **No NVIDIA GPU?** Delete the `deploy:` block in `docker-compose.yml`. Everything runs on the CPU, slowly.
+- **YouTube bot check:** inside Docker the downloader can't read your browser's cookies, so use **Settings > YouTube access > Choose file / Paste** with an exported `cookies.txt`.
+- **Update:** `git pull`, then the same command. **Stop:** `docker compose down`.
+
+### Without Docker
+
 You need Python ≥ 3.11 with [uv](https://docs.astral.sh/uv/), [FFmpeg](https://ffmpeg.org/), [Bun](https://bun.sh/), and Node.js, Deno or Bun for YouTube's JS challenge. An NVIDIA GPU is strongly recommended; Demucs and WhisperX fall back to CPU, slowly.
 
 ```bash

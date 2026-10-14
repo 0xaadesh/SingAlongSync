@@ -1,0 +1,9 @@
+.venv
+__pycache__
+**/__pycache__
+downloads
+cache
+separated
+settings.json
+cookies.txt
+.env

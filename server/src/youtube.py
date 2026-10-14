@@ -88,9 +88,9 @@ class YouTubeBotCheckError(RuntimeError):
 def cookie_options(settings):
     """yt-dlp options for signed-in requests, from Settings or server/.env (YTDLP_COOKIES_*)."""
     browser = settings.get("cookiesBrowser") or os.getenv("YTDLP_COOKIES_FROM_BROWSER")
-    cookie_file = settings.get("cookiesFile") or os.getenv("YTDLP_COOKIES_FILE")
+    cookie_file = settings_store.cookies_file(settings) or os.getenv("YTDLP_COOKIES_FILE")
     if cookie_file:
-        return {"cookiefile": cookie_file}
+        return {"cookiefile": str(cookie_file)}
     if browser:
         return {"cookiesfrombrowser": (browser,)}
     return {}

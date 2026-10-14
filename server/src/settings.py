@@ -6,14 +6,14 @@ and they never leave the server unmasked.
 """
 import json
 import threading
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
-from src.config import SERVER_ROOT
+from src.config import DATA_DIR
 from src.status import write_json_atomic
 
-SETTINGS_PATH = SERVER_ROOT / "settings.json"
+SETTINGS_PATH = DATA_DIR / "settings.json"
 # cookies.txt picked or pasted in Settings (gitignored)
-COOKIES_PATH = SERVER_ROOT / "cookies.txt"
+COOKIES_PATH = DATA_DIR / "cookies.txt"
 
 PROVIDERS = {
     "openai": "OpenAI",
@@ -94,6 +94,25 @@ def translation_ready(settings):
     return translation_problem(settings) is None
 
 
+def cookies_file(settings):
+    """
+    The cookies.txt to use, or None. The one saved from Settings is stored by name and lives
+    in the data folder, so the same settings work on the host and inside Docker.
+    """
+    value = settings.get("cookiesFile")
+    if not value:
+        return None
+    path = Path(value)
+    # A Windows path isn't "absolute" to Linux, so check both kinds
+    absolute = path.is_absolute() or PureWindowsPath(value).is_absolute()
+    if not absolute:
+        return DATA_DIR / path
+    # Saved as an absolute path by an older version, or on the other side of a Docker mount
+    if not path.exists() and PureWindowsPath(value).name == COOKIES_PATH.name and COOKIES_PATH.exists():
+        return COOKIES_PATH
+    return path
+
+
 def youtube_cookie_count(path):
     """How many youtube.com cookies a cookies.txt holds, or None when it can't be read."""
     try:
@@ -105,7 +124,7 @@ def youtube_cookie_count(path):
 
 def public(settings):
     """Settings safe to send to the browser: keys masked, cookie contents never included."""
-    cookies_file = settings.get("cookiesFile")
+    cookies = cookies_file(settings)
     return {
         "provider": settings["provider"],
         "model": settings["model"],
@@ -115,8 +134,8 @@ def public(settings):
         "providers": [{"id": p, "name": name} for p, name in PROVIDERS.items()],
         "baseUrl": settings.get("baseUrl"),
         "cookiesBrowser": settings.get("cookiesBrowser"),
-        "cookiesFile": cookies_file,
-        "cookiesCount": youtube_cookie_count(cookies_file) if cookies_file else None,
+        "cookiesFile": str(cookies) if cookies else None,
+        "cookiesCount": youtube_cookie_count(cookies) if cookies else None,
         "cookieBrowsers": COOKIE_BROWSERS,
         "alignmentMode": settings.get("alignmentMode") or "auto",
     }

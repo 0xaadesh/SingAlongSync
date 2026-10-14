@@ -1,0 +1,42 @@
+# docker compose up -d --build   then open http://localhost:3000
+name: singalongsync
+
+services:
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      # Data (songs, caches, settings, cookies) lives in the mounted server/ folder below
+      SAS_DATA_DIR: /data
+    env_file:
+      # Optional: HF_TOKEN, YTDLP_COOKIES_FILE, etc. (paths in it must be container paths)
+      - path: ./server/.env
+        required: false
+    volumes:
+      # Your library on the host: the same server/downloads, server/cache and
+      # server/settings.json a non-Docker run uses, so both see the same songs
+      - ./server:/data
+      # Hugging Face, torch hub and Demucs model downloads (several GB), kept between rebuilds
+      - models:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            # NVIDIA GPU for Demucs and WhisperX. Without one, delete this block (much slower).
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  web:
+    build:
+      context: ./web
+      args:
+        API_PROXY_TARGET: http://server:8000
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "3000:3000"
+
+volumes:
+  models:

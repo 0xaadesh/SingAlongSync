@@ -10,12 +10,12 @@ import time
 import requests
 from ytmusicapi import YTMusic
 
-from src.config import SERVER_ROOT
+from src.config import CACHE_DIR
 from src.status import write_json_atomic
 
-ARTISTS_CACHE = SERVER_ROOT / "cache" / "artists.json"
+ARTISTS_CACHE = CACHE_DIR / "artists.json"
 # Served by the API at /media/avatars/<channel id>.jpg
-AVATARS_DIR = SERVER_ROOT / "cache" / "avatars"
+AVATARS_DIR = CACHE_DIR / "avatars"
 COVER_SIZE = 1000
 AVATAR_SIZE = 600
 
