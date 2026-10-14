@@ -1,7 +1,7 @@
 "use client";
 
-import { CircleAlert, CircleCheck, Cookie } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { CircleAlert, CircleCheck, ClipboardPaste, Cookie, FileUp } from "lucide-react";
+import { useRef, useState } from "react";
 import { checkYouTubeAccess, type Settings, type SettingsUpdate } from "@/lib/api";
 import { Combobox } from "@/components/ui/combobox";
 
@@ -18,14 +18,22 @@ const BROWSER_NAMES: Record<string, string> = {
   safari: "Safari",
 };
 
+const smallButton =
+  "pressable h-7 shrink-0 rounded-full px-3 text-[12px] font-medium text-muted hover:bg-white/10 hover:text-fg disabled:opacity-50";
+const wideButton =
+  "pressable flex h-10 flex-1 items-center justify-center gap-2 rounded-[12px] bg-white/[0.06] text-[13px] font-medium hover:bg-white/10 disabled:opacity-50";
+
 /**
  * When YouTube asks to "confirm you're not a bot", yt-dlp needs a signed-in session:
- * cookies read from a browser, or an exported cookies.txt.
+ * cookies read from a browser, or an exported cookies.txt (picked or pasted, saved on the server).
  */
 export function YouTubeAccessCard({ settings, save }: { settings: Settings; save: Save }) {
-  const [path, setPath] = useState(settings.cookiesFile ?? "");
   const [check, setCheck] = useState<{ ok: boolean; message: string } | null>(null);
   const [checking, setChecking] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const runCheck = async () => {
     setChecking(true);
@@ -39,11 +47,30 @@ export function YouTubeAccessCard({ settings, save }: { settings: Settings; save
     }
   };
 
-  const savePath = async (e?: FormEvent) => {
-    e?.preventDefault();
-    if (path.trim() === (settings.cookiesFile ?? "")) return;
-    await save({ cookiesFile: path.trim() });
+  const saveCookies = async (text: string) => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setCheck(null);
+    if (await save({ cookiesText: text })) {
+      setPasting(false);
+      setPasted("");
+    }
+    setBusy(false);
   };
+
+  const pickFile = async (file: File | undefined) => {
+    // Clear so picking the same file again still fires onChange
+    if (fileRef.current) fileRef.current.value = "";
+    if (file) await saveCookies(await file.text());
+  };
+
+  const removeCookies = () => {
+    setCheck(null);
+    save({ cookiesFile: "" }, { cookiesFile: null, cookiesCount: null });
+  };
+
+  const fileName = settings.cookiesFile?.split(/[\\/]/).pop();
+  const count = settings.cookiesCount;
 
   const options = [
     { id: "", label: "None", description: "Download without signing in" },
@@ -88,23 +115,73 @@ export function YouTubeAccessCard({ settings, save }: { settings: Settings; save
           />
         </div>
 
-        <div className="grid gap-2.5 py-4 sm:grid-cols-[200px_minmax(0,1fr)] sm:items-center sm:gap-6">
-          <div>
+        <div className="grid gap-2.5 py-4 sm:grid-cols-[200px_minmax(0,1fr)] sm:items-start sm:gap-6">
+          <div className="sm:pt-2.5">
             <p className="text-[14px] font-medium">Or a cookies.txt</p>
             <p className="text-[12px] text-subtle">Overrides the browser when set</p>
           </div>
-          <form onSubmit={savePath} className="flex h-10 items-center rounded-[12px] bg-bg px-3 shadow-[0_0_0_1px_rgb(255_255_255/0.1)] transition-shadow duration-150 focus-within:shadow-[0_0_0_1px_rgb(255_255_255/0.1),0_0_0_4px_rgb(250_45_72/0.25)]">
+          <div className="min-w-0">
             <input
-              type="text"
-              spellCheck={false}
-              aria-label="Path to cookies.txt"
-              placeholder="C:\path\to\cookies.txt"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              onBlur={() => savePath()}
-              className="h-full min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:font-sans placeholder:text-subtle"
+              ref={fileRef}
+              type="file"
+              accept=".txt,text/plain"
+              hidden
+              onChange={(e) => pickFile(e.target.files?.[0])}
             />
-          </form>
+            {pasting ? (
+              <div className="grid gap-2">
+                <textarea
+                  autoFocus
+                  spellCheck={false}
+                  aria-label="cookies.txt contents"
+                  placeholder="# Netscape HTTP Cookie File"
+                  value={pasted}
+                  onChange={(e) => setPasted(e.target.value)}
+                  rows={5}
+                  className="w-full resize-y rounded-[12px] bg-bg px-3 py-2.5 font-mono text-[12px] whitespace-pre shadow-[0_0_0_1px_rgb(255_255_255/0.1)] outline-none transition-shadow duration-150 placeholder:text-subtle focus:shadow-[0_0_0_1px_rgb(255_255_255/0.1),0_0_0_4px_rgb(250_45_72/0.25)]"
+                />
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setPasting(false)} disabled={busy} className={smallButton}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => saveCookies(pasted)}
+                    disabled={busy || !pasted.trim()}
+                    className="pressable h-8 rounded-full bg-white px-3.5 text-[13px] font-semibold text-black hover:bg-white/85 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : settings.cookiesFile ? (
+              <div className="flex h-10 items-center gap-1 rounded-[12px] bg-bg pr-1.5 pl-3 shadow-[0_0_0_1px_rgb(255_255_255/0.1)]">
+                <p className="min-w-0 flex-1 truncate text-[13px]" title={settings.cookiesFile}>
+                  <span className="font-mono">{fileName}</span>
+                  <span className={count == null ? "text-danger" : "text-subtle"}>
+                    {count == null ? " · can't be read" : ` · ${count} YouTube cookie${count === 1 ? "" : "s"}`}
+                  </span>
+                </p>
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className={smallButton}>
+                  Replace
+                </button>
+                <button type="button" onClick={removeCookies} disabled={busy} className={smallButton}>
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className={wideButton}>
+                  <FileUp size={15} strokeWidth={2} />
+                  Choose file
+                </button>
+                <button type="button" onClick={() => setPasting(true)} disabled={busy} className={wideButton}>
+                  <ClipboardPaste size={15} strokeWidth={2} />
+                  Paste
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

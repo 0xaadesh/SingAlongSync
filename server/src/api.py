@@ -223,7 +223,31 @@ class SettingsUpdate(BaseModel):
     # YouTube access: a browser to read cookies from, or a cookies.txt path. Empty string clears.
     cookiesBrowser: str | None = None
     cookiesFile: str | None = None
+    # Contents of a cookies.txt picked or pasted in the browser; saved as server/cookies.txt
+    cookiesText: str | None = None
     alignmentMode: str | None = None
+
+
+NETSCAPE_HEADER = "# Netscape HTTP Cookie File"
+
+
+def save_cookies_text(text):
+    """Validate a Netscape-format cookies.txt and write it to COOKIES_PATH."""
+    lines = text.replace("\r\n", "\n").strip().split("\n")
+    # name/value lines have 7 tab-separated fields; "#HttpOnly_" marks HttpOnly cookies
+    cookies = [l for l in lines if l.count("\t") >= 6 and (not l.startswith("#") or l.startswith("#HttpOnly_"))]
+    if not cookies:
+        raise HTTPException(
+            status_code=422,
+            detail="That isn't a cookies.txt. Export one in Netscape format with a browser extension.",
+        )
+    if not any("youtube.com" in l.split("\t", 1)[0] for l in cookies):
+        raise HTTPException(status_code=422, detail="No YouTube cookies in that file. Export it while on youtube.com.")
+    # yt-dlp's cookie jar rejects files without the format header
+    if not lines[0].startswith(("# Netscape HTTP Cookie File", "# HTTP Cookie File")):
+        lines.insert(0, NETSCAPE_HEADER)
+    settings_store.COOKIES_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return str(settings_store.COOKIES_PATH)
 
 
 @app.get("/api/settings")
@@ -268,7 +292,12 @@ def update_settings(body: SettingsUpdate):
         path = body.cookiesFile.strip().strip('"') or None
         if path and not Path(path).is_file():
             raise HTTPException(status_code=422, detail="No file found at that path.")
+        if not path:
+            # Removing the saved cookies: delete our copy, never a file the user pointed to
+            settings_store.COOKIES_PATH.unlink(missing_ok=True)
         settings["cookiesFile"] = path
+    if body.cookiesText is not None:
+        settings["cookiesFile"] = save_cookies_text(body.cookiesText)
     settings_store.save(settings)
     return settings_store.public(settings)
 

@@ -191,6 +191,8 @@ export type Settings = {
   cookiesBrowser: string | null;
   /** Path to an exported cookies.txt, or null. */
   cookiesFile: string | null;
+  /** YouTube cookies in that file; null when unset or unreadable. */
+  cookiesCount: number | null;
   cookieBrowsers: string[];
   alignmentMode: AlignmentMode;
 };
@@ -202,6 +204,8 @@ export type SettingsUpdate = Partial<Pick<Settings, "provider" | "model" | "tran
   /** Empty string clears. */
   cookiesBrowser?: string;
   cookiesFile?: string;
+  /** Contents of a cookies.txt; the server saves it and points cookiesFile at it. */
+  cookiesText?: string;
 };
 
 export const checkYouTubeAccess = () => request<{ ok: boolean; message: string }>("/api/youtube/check", { method: "POST" });

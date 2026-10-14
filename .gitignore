@@ -33,3 +33,6 @@ server/cache/
 
 # AI provider settings and API keys
 server/settings.json
+
+# YouTube cookies saved from Settings
+server/cookies.txt

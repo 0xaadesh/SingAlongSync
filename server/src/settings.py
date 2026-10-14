@@ -6,11 +6,14 @@ and they never leave the server unmasked.
 """
 import json
 import threading
+from pathlib import Path
 
 from src.config import SERVER_ROOT
 from src.status import write_json_atomic
 
 SETTINGS_PATH = SERVER_ROOT / "settings.json"
+# cookies.txt picked or pasted in Settings (gitignored)
+COOKIES_PATH = SERVER_ROOT / "cookies.txt"
 
 PROVIDERS = {
     "openai": "OpenAI",
@@ -66,8 +69,18 @@ def translation_ready(settings):
     return bool(settings["translationEnabled"] and settings["provider"] and settings["model"] and api_key(settings))
 
 
+def youtube_cookie_count(path):
+    """How many youtube.com cookies a cookies.txt holds, or None when it can't be read."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    return sum(1 for line in text.splitlines() if "youtube.com" in line.split("\t", 1)[0])
+
+
 def public(settings):
-    """Settings safe to send to the browser: keys masked."""
+    """Settings safe to send to the browser: keys masked, cookie contents never included."""
+    cookies_file = settings.get("cookiesFile")
     return {
         "provider": settings["provider"],
         "model": settings["model"],
@@ -76,7 +89,8 @@ def public(settings):
         "keys": {p: mask(api_key(settings, p)) for p in PROVIDERS},
         "providers": [{"id": p, "name": name} for p, name in PROVIDERS.items()],
         "cookiesBrowser": settings.get("cookiesBrowser"),
-        "cookiesFile": settings.get("cookiesFile"),
+        "cookiesFile": cookies_file,
+        "cookiesCount": youtube_cookie_count(cookies_file) if cookies_file else None,
         "cookieBrowsers": COOKIE_BROWSERS,
         "alignmentMode": settings.get("alignmentMode") or "auto",
     }
