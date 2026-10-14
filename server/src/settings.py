@@ -22,13 +22,20 @@ PROVIDERS = {
     "groq": "Groq",
     "xai": "xAI",
     "openrouter": "OpenRouter",
+    # Any server speaking the OpenAI chat API (Ollama, LM Studio, vLLM, LiteLLM…) at baseUrl
+    "custom": "OpenAI-compatible",
 }
+
+# Providers that work without an API key (local servers often need none)
+KEY_OPTIONAL = {"custom"}
 
 DEFAULTS = {
     "provider": None,
     "model": None,
     "translationEnabled": False,
     "apiKeys": {},
+    # Endpoint for the OpenAI-compatible provider, e.g. http://localhost:11434/v1
+    "baseUrl": None,
     # yt-dlp cookies for when YouTube asks to confirm you're not a bot
     "cookiesBrowser": None,
     "cookiesFile": None,
@@ -66,7 +73,12 @@ def api_key(settings, provider=None):
 
 def translation_ready(settings):
     """Translation runs only when switched on and fully configured."""
-    return bool(settings["translationEnabled"] and settings["provider"] and settings["model"] and api_key(settings))
+    provider = settings["provider"]
+    if not (settings["translationEnabled"] and provider and settings["model"]):
+        return False
+    if provider == "custom" and not settings.get("baseUrl"):
+        return False
+    return provider in KEY_OPTIONAL or bool(api_key(settings))
 
 
 def youtube_cookie_count(path):
@@ -88,6 +100,7 @@ def public(settings):
         "ready": translation_ready(settings),
         "keys": {p: mask(api_key(settings, p)) for p in PROVIDERS},
         "providers": [{"id": p, "name": name} for p, name in PROVIDERS.items()],
+        "baseUrl": settings.get("baseUrl"),
         "cookiesBrowser": settings.get("cookiesBrowser"),
         "cookiesFile": cookies_file,
         "cookiesCount": youtube_cookie_count(cookies_file) if cookies_file else None,

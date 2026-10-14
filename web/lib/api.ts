@@ -176,7 +176,7 @@ export function fetchArtistAvatars() {
 
 export const watchUrl = (videoId: string) => `https://music.youtube.com/watch?v=${videoId}`;
 
-export type ProviderId = "openai" | "google" | "anthropic" | "groq" | "xai" | "openrouter";
+export type ProviderId = "openai" | "google" | "anthropic" | "groq" | "xai" | "openrouter" | "custom";
 
 export type Settings = {
   provider: ProviderId | null;
@@ -187,6 +187,8 @@ export type Settings = {
   /** Masked saved key per provider, null when none. */
   keys: Record<ProviderId, string | null>;
   providers: { id: ProviderId; name: string }[];
+  /** Endpoint for the OpenAI-compatible provider, or null. */
+  baseUrl: string | null;
   /** Browser yt-dlp reads YouTube cookies from, or null. */
   cookiesBrowser: string | null;
   /** Path to an exported cookies.txt, or null. */
@@ -201,6 +203,8 @@ export type AlignmentMode = "auto" | "native" | "romanized";
 
 export type SettingsUpdate = Partial<Pick<Settings, "provider" | "model" | "translationEnabled" | "alignmentMode">> & {
   apiKey?: string;
+  /** Endpoint for the OpenAI-compatible provider. Empty string clears. */
+  baseUrl?: string;
   /** Empty string clears. */
   cookiesBrowser?: string;
   cookiesFile?: string;

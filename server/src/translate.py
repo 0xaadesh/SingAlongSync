@@ -61,8 +61,14 @@ def has_non_latin(text):
     return any(ch.isalpha() and ord(ch) > 0x24F for ch in text)
 
 
-def build_model(provider, model_name, key):
+def build_model(provider, model_name, key, base_url=None):
     """A pydantic-ai model for the chosen provider."""
+    if provider == "custom":
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        # The OpenAI client insists on a key; local servers ignore whatever is sent
+        return OpenAIChatModel(model_name, provider=OpenAIProvider(base_url=base_url, api_key=key or "not-needed"))
     if provider == "openai":
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
@@ -104,15 +110,17 @@ def translate_song(work_dir, settings=None):
     settings = settings or settings_store.load()
     provider, model_name = settings["provider"], settings["model"]
     key = settings_store.api_key(settings)
-    if not (provider and model_name and key):
-        raise RuntimeError("AI translation isn't configured. Pick a provider, model and API key in Settings.")
+    base_url = settings.get("baseUrl")
+    configured = provider and model_name and (key or provider in settings_store.KEY_OPTIONAL)
+    if not configured or (provider == "custom" and not base_url):
+        raise RuntimeError("AI translation isn't configured. Finish the provider setup in Settings.")
 
     lines = lyric_lines(work_dir)
     meta = json.loads((work_dir / "metadata.json").read_text(encoding="utf-8"))
     numbered = "\n".join(f"{i}: {line['line']}" for i, line in enumerate(lines))
     prompt = f'Song: "{meta.get("title")}" by {meta.get("artist")}\n\nLyrics:\n{numbered}'
 
-    agent = Agent(build_model(provider, model_name, key), output_type=SongTranslation, system_prompt=SYSTEM_PROMPT)
+    agent = Agent(build_model(provider, model_name, key, base_url), output_type=SongTranslation, system_prompt=SYSTEM_PROMPT)
     result = agent.run_sync(prompt).output
 
     # Keep only valid line numbers; drop "translations" identical to the original, and

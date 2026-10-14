@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ExternalLink, Eye, EyeOff, Languages, RotateCw } from "lucide-react";
+import { Check, ExternalLink, Eye, EyeOff, Languages, RotateCw, Server } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import {
   fetchModels,
@@ -22,23 +22,32 @@ import { Tabs } from "@/components/ui/tabs";
 import { AlignmentCard } from "./alignment-card";
 import { YouTubeAccessCard } from "./youtube-access";
 
-const PROVIDER_INFO: Record<ProviderId, { tagline: string; keyUrl: string; keyHint: string }> = {
+const PROVIDER_INFO: Record<ProviderId, { tagline: string; keyUrl: string | null; keyHint: string }> = {
   openai: { tagline: "GPT models", keyUrl: "https://platform.openai.com/api-keys", keyHint: "sk-…" },
   google: { tagline: "Gemini models", keyUrl: "https://aistudio.google.com/apikey", keyHint: "AIza…" },
   anthropic: { tagline: "Claude models", keyUrl: "https://console.anthropic.com/settings/keys", keyHint: "sk-ant-…" },
   groq: { tagline: "Fast open models", keyUrl: "https://console.groq.com/keys", keyHint: "gsk_…" },
   xai: { tagline: "Grok models", keyUrl: "https://console.x.ai", keyHint: "xai-…" },
   openrouter: { tagline: "Hundreds of models, one key", keyUrl: "https://openrouter.ai/keys", keyHint: "sk-or-…" },
+  custom: { tagline: "Ollama, LM Studio, vLLM or any /v1 endpoint", keyUrl: null, keyHint: "optional" },
 };
+
+/** Typed model name, endpoint URL and optional key instead of a model list and required key. */
+const isCustom = (provider: ProviderId | null) => provider === "custom";
 
 /** Brand mark from /public/providers (sourced from thesvg.org), on a small dark tile. */
 function ProviderLogo({ id, size = 24 }: { id: ProviderId; size?: number }) {
+  const mark = size * 0.62;
   return (
     <span
       className="grid shrink-0 place-items-center rounded-[7px] bg-white/[0.07] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]"
       style={{ width: size, height: size }}
     >
-      <img src={`/providers/${id}.svg`} alt="" width={size * 0.62} height={size * 0.62} className="object-contain" style={{ width: size * 0.62, height: size * 0.62 }} />
+      {isCustom(id) ? (
+        <Server size={mark} strokeWidth={2} className="text-muted" />
+      ) : (
+        <img src={`/providers/${id}.svg`} alt="" width={mark} height={mark} className="object-contain" style={{ width: mark, height: mark }} />
+      )}
     </span>
   );
 }
@@ -134,11 +143,19 @@ function useSettingsTab() {
 function TranslationCard({ settings, save }: { settings: Settings; save: Save }) {
   const hintId = useId();
   const provider = settings.provider;
+  const custom = isCustom(provider);
   const hasKey = !!(provider && settings.keys[provider]);
-  const configured = hasKey && !!settings.model;
+  // An OpenAI-compatible server needs its URL instead of a key; the key is optional there
+  const connected = custom ? !!settings.baseUrl : hasKey;
+  const configured = connected && !!settings.model;
   const providerName = settings.providers.find((p) => p.id === provider)?.name;
-  const missing = !provider ? "provider" : !hasKey ? "key" : !settings.model ? "model" : null;
-  const MISSING_LABEL = { provider: "choose a provider", key: "add an API key", model: "pick a model" } as const;
+  const missing = !provider ? "provider" : !connected ? (custom ? "url" : "key") : !settings.model ? "model" : null;
+  const MISSING_LABEL = {
+    provider: "choose a provider",
+    url: "enter the server URL",
+    key: "add an API key",
+    model: custom ? "enter a model name" : "pick a model",
+  } as const;
   // Set when the switch is flipped before setup is finished
   const [nudge, setNudge] = useState(false);
 
@@ -208,15 +225,30 @@ function TranslationCard({ settings, save }: { settings: Settings; save: Save })
           />
         </Row>
 
+        {custom && (
+          <Row step={2} done={!!settings.baseUrl} label="Server URL" hint="Its OpenAI-compatible /v1 address">
+            <TextSetting
+              id="settings-url"
+              label="Server URL"
+              placeholder="http://localhost:11434/v1"
+              value={settings.baseUrl}
+              mono
+              onSave={(url) => save({ baseUrl: url })}
+            />
+          </Row>
+        )}
+
         <Row
-          step={2}
-          done={hasKey}
-          disabled={!provider}
-          label="API key"
+          step={custom ? 3 : 2}
+          done={custom ? connected : hasKey}
+          disabled={!provider || (custom && !connected)}
+          label={custom ? "API key (optional)" : "API key"}
           hint={
-            provider ? (
+            !provider ? (
+              "Pick a provider first"
+            ) : PROVIDER_INFO[provider].keyUrl ? (
               <a
-                href={PROVIDER_INFO[provider].keyUrl}
+                href={PROVIDER_INFO[provider].keyUrl!}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-0.5 hover:text-fg hover:underline"
@@ -224,7 +256,7 @@ function TranslationCard({ settings, save }: { settings: Settings; save: Save })
                 Get a {providerName} key <ExternalLink size={11} strokeWidth={2} />
               </a>
             ) : (
-              "Pick a provider first"
+              "Leave empty if the server needs none"
             )
           }
         >
@@ -232,8 +264,26 @@ function TranslationCard({ settings, save }: { settings: Settings; save: Save })
           <KeyField key={provider ?? "none"} settings={settings} save={save} />
         </Row>
 
-        <Row step={3} done={!!settings.model && hasKey} disabled={!hasKey} label="Model" hint="A fast, cheap one is plenty">
-          <ModelPicker key={`${provider}-${settings.keys[provider ?? "openai"]}`} settings={settings} save={save} disabled={!hasKey} />
+        <Row
+          step={custom ? 4 : 3}
+          done={configured}
+          disabled={!connected}
+          label="Model"
+          hint={custom ? "As the server names it" : "A fast, cheap one is plenty"}
+        >
+          {custom ? (
+            <TextSetting
+              id="settings-model"
+              label="Model"
+              placeholder={connected ? "e.g. llama3.1:8b" : "Enter the server URL first"}
+              value={settings.model}
+              disabled={!connected}
+              mono
+              onSave={(model) => save({ model }, { model: model || null })}
+            />
+          ) : (
+            <ModelPicker key={`${provider}-${settings.keys[provider ?? "openai"]}`} settings={settings} save={save} disabled={!hasKey} />
+          )}
         </Row>
       </div>
 
@@ -450,6 +500,63 @@ function ModelPicker({ settings, save, disabled }: { settings: Settings; save: S
       />
       {error && <p className="mt-1.5 text-[12px] text-danger">{error}</p>}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** A free-text setting, saved on Enter or when the field loses focus. */
+function TextSetting({
+  id,
+  label,
+  placeholder,
+  value,
+  disabled,
+  mono,
+  onSave,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string | null;
+  disabled?: boolean;
+  mono?: boolean;
+  onSave: (value: string) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  // Follow the saved value (e.g. after the server normalises it or a save is rolled back)
+  useEffect(() => setDraft(value ?? ""), [value]);
+
+  const commit = () => {
+    if (draft.trim() !== (value ?? "")) onSave(draft.trim());
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        commit();
+      }}
+      className={`flex h-10 items-center rounded-[12px] bg-bg px-3 shadow-[0_0_0_1px_rgb(255_255_255/0.1)] transition-[box-shadow,opacity] duration-150 focus-within:shadow-[0_0_0_1px_rgb(255_255_255/0.1),0_0_0_4px_rgb(250_45_72/0.25)] ${
+        disabled ? "opacity-40" : ""
+      }`}
+    >
+      <input
+        id={id}
+        type="text"
+        spellCheck={false}
+        autoComplete="off"
+        aria-label={label}
+        placeholder={placeholder}
+        disabled={disabled}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        className={`h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:font-sans placeholder:text-subtle ${
+          mono ? "font-mono" : ""
+        }`}
+      />
+    </form>
   );
 }
 

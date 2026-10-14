@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 import json
 import mimetypes
+import re
 import shutil
 import threading
 
@@ -220,6 +221,8 @@ class SettingsUpdate(BaseModel):
     translationEnabled: bool | None = None
     # Saved for `provider` (or the current provider when omitted). Empty string clears it.
     apiKey: str | None = None
+    # Endpoint for the OpenAI-compatible provider. Empty string clears.
+    baseUrl: str | None = None
     # YouTube access: a browser to read cookies from, or a cookies.txt path. Empty string clears.
     cookiesBrowser: str | None = None
     cookiesFile: str | None = None
@@ -275,6 +278,11 @@ def update_settings(body: SettingsUpdate):
         else:
             keys.pop(provider, None)
         settings["apiKeys"] = keys
+    if body.baseUrl is not None:
+        url = body.baseUrl.strip().rstrip("/") or None
+        if url and not re.match(r"^https?://[^\s/]+", url):
+            raise HTTPException(status_code=422, detail="Enter a URL starting with http:// or https://.")
+        settings["baseUrl"] = url
     if body.model is not None:
         settings["model"] = body.model.strip() or None
     if body.translationEnabled is not None:
@@ -307,6 +315,9 @@ def provider_models(provider: str):
     """The provider's chat models, fetched live with the saved key (doubles as a key check)."""
     if provider not in settings_store.PROVIDERS:
         raise HTTPException(status_code=404, detail="Unknown provider.")
+    if provider == "custom":
+        # The settings page takes a typed model name for this one
+        raise HTTPException(status_code=400, detail="Type the model name for an OpenAI-compatible server.")
     key = settings_store.api_key(settings_store.load(), provider)
     if not key:
         raise HTTPException(status_code=400, detail="Add an API key for this provider first.")

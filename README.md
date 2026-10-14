@@ -71,7 +71,7 @@ Output goes to `server/downloads/<video_id>/`, which the web app reads too. Step
 - **Play:** `Space` play/pause, `←`/`→` seek 5 s, `M` mute, `K` karaoke mode, `[`/`]` shift lyrics 0.1 s, `/` search, `Esc` close the player.
 - **Player header:** the microphone holds karaoke mode, guide vocals and vocals only. The language button holds translation, pronunciation, chords, the key readout and lyrics timing. The list button shows what plays next.
 - **Fix or add lyrics:** **Find lyrics** (or **Lyrics options > Find different lyrics**) searches LRCLIB, or takes pasted LRC text or an `.lrc` file. The song is re-aligned in about a minute.
-- **AI translation:** in **Settings**, pick OpenAI, Google, Anthropic, Groq, xAI or OpenRouter, paste an API key and choose a model. New songs get translated automatically; **Translate all** handles songs already in your library. The key is stored in `server/settings.json` (gitignored) and never sent back to the browser.
+- **AI translation:** in **Settings**, pick OpenAI, Google, Anthropic, Groq, xAI or OpenRouter, paste an API key and choose a model. Or pick **OpenAI-compatible** for a local or self-hosted server (Ollama, LM Studio, vLLM…): enter its URL and model name; the key is optional. New songs get translated automatically; **Translate all** handles songs already in your library. The key is stored in `server/settings.json` (gitignored) and never sent back to the browser.
 
 **"Sign in to confirm you're not a bot"?** YouTube does this after many downloads from one IP. In **Settings > YouTube access**, pick a browser you're signed in to YouTube with (Firefox is most reliable on Windows; Chrome and Edge lock their cookies while open) or choose or paste an exported `cookies.txt`, then press **Test**.
 
