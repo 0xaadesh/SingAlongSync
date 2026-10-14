@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { cancelJob, createJob, JOBS_STREAM_URL, type Job } from "./api";
+import { cancelJob, createJob, fetchJobs, JOBS_STREAM_URL, type Job } from "./api";
 import { refreshLibrary } from "./library";
 import { createStore, useStore } from "./store";
 
@@ -21,7 +21,14 @@ export function onJobFinished(listener: (e: JobEvent) => void) {
 let source: EventSource | null = null;
 let subscribers = 0;
 
-function applySnapshot(next: Job[]) {
+/** Pin relative retry countdowns to this browser's clock. */
+const withRetryAt = (job: Job): Job => ({
+  ...job,
+  retryAt: job.retryIn != null ? Date.now() / 1000 + job.retryIn : null,
+});
+
+function applySnapshot(raw: Job[]) {
+  const next = raw.map(withRetryAt);
   const prevById = new Map(jobsStore.get().jobs.map((j) => [j.id, j]));
   jobsStore.set({ jobs: next, connected: true });
 
@@ -39,6 +46,12 @@ function applySnapshot(next: Job[]) {
 }
 
 function connect() {
+  // Show the list right away (e.g. after a refresh) instead of waiting on the stream
+  fetchJobs()
+    .then((jobs) => {
+      if (source && !jobsStore.get().connected) applySnapshot(jobs);
+    })
+    .catch(() => {});
   source = new EventSource(JOBS_STREAM_URL);
   source.onmessage = (e) => applySnapshot(JSON.parse(e.data));
   // EventSource reconnects on its own; just reflect the state.
@@ -63,7 +76,7 @@ export function useJobs() {
 export async function submitJob(url: string) {
   const result = await createJob(url);
   if (result.job) {
-    const job = result.job;
+    const job = withRetryAt(result.job);
     // Show the card right away; the stream will take over from here.
     jobsStore.set((s) => ({ ...s, jobs: [job, ...s.jobs.filter((j) => j.id !== job.id)] }));
   }

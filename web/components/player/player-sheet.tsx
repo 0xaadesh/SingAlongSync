@@ -13,6 +13,7 @@ import {
   setPlayerView,
   showChordsStore,
   showRomanizationsStore,
+  showSongFactsStore,
   showTranslationsStore,
   type PlayerView,
 } from "@/lib/ui";
@@ -41,6 +42,7 @@ export function PlayerSheet() {
   const showRomanizations = useStore(showRomanizationsStore);
   const romanizedFirst = useStore(romanizedFirstStore);
   const showChords = useStore(showChordsStore);
+  const showSongFacts = useStore(showSongFactsStore);
   const view = useStore(playerViewStore);
   useEffect(() => initPlayerView(), []);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -175,7 +177,7 @@ export function PlayerSheet() {
                 <div className="min-w-0">
                   <h2 className="truncate text-lg leading-tight font-semibold lg:text-xl">{song.title}</h2>
                   <Marquee key={song.videoId} className="text-[15px] text-white/60 lg:text-base">{song.artist}</Marquee>
-                  {detail && detail.videoId === song.videoId && <SongFacts detail={detail} />}
+                  {showSongFacts && detail && detail.videoId === song.videoId && <SongFacts detail={detail} />}
                 </div>
               </div>
 

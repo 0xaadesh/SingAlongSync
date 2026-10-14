@@ -12,15 +12,18 @@ import { toast } from "@/lib/toast";
 import {
   initShowChords,
   initShowRomanizations,
+  initShowSongFacts,
   openLyricsDialog,
   initShowTranslations,
   romanizedFirstStore,
   setRomanizedFirst,
   setShowChords,
   setShowRomanizations,
+  setShowSongFacts,
   setShowTranslations,
   showChordsStore,
   showRomanizationsStore,
+  showSongFactsStore,
   showTranslationsStore,
 } from "@/lib/ui";
 import { ExplicitBadge } from "@/components/ui/explicit-badge";
@@ -67,7 +70,7 @@ function MenuRow({ title, hint, control }: { title: string; hint?: string; contr
 // ---------------------------------------------------------------------------
 
 export function KaraokeMenu({ detail }: { detail: SongDetail }) {
-  const { karaoke, vocalLevel } = usePlayer();
+  const { karaoke, vocalLevel, vocalsOnly } = usePlayer();
   const available = !!detail.stems;
 
   return (
@@ -75,7 +78,7 @@ export function KaraokeMenu({ detail }: { detail: SongDetail }) {
       label="Karaoke"
       width={300}
       trigger={(props) => (
-        <HeaderButton label="Karaoke" active={karaoke && available} {...props}>
+        <HeaderButton label="Karaoke" active={(karaoke || vocalsOnly) && available} {...props}>
           <Mic2 size={18} strokeWidth={2} />
         </HeaderButton>
       )}
@@ -108,6 +111,13 @@ export function KaraokeMenu({ detail }: { detail: SongDetail }) {
               <p className="mt-2 text-[12px] text-subtle">Keep a little of the singer to stay on track. Press K to toggle.</p>
             </div>
           )}
+          {available && (
+            <MenuRow
+              title="Vocals only"
+              hint="Plays just the singer, without the music."
+              control={<Switch label="Vocals only" checked={vocalsOnly} onChange={(on) => player.setVocalsOnly(on)} />}
+            />
+          )}
         </>
       )}
     </Popover>
@@ -131,6 +141,8 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
   const showRomanizations = useStore(showRomanizationsStore);
   const romanizedFirst = useStore(romanizedFirstStore);
   const showChords = useStore(showChordsStore);
+  const showSongFacts = useStore(showSongFactsStore);
+  const hasSongFacts = detail.analysisStatus === "pending" || detail.analysisStatus === "ready";
   const chordCount = detail.analysis?.chords.length ?? 0;
   const [translating, setTranslating] = useState(false);
   const router = useRouter();
@@ -139,6 +151,7 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
     initShowTranslations();
     initShowRomanizations();
     initShowChords();
+    initShowSongFacts();
   }, []);
 
   // While a translation runs on the server, refetch until it lands.
@@ -218,6 +231,13 @@ export function LyricsMenu({ detail }: { detail: SongDetail }) {
               title="Chords"
               hint={`Above the lyrics · key ${detail.analysis?.key}`}
               control={<Switch label="Chords" checked={showChords} onChange={setShowChords} />}
+            />
+          )}
+          {hasSongFacts && (
+            <MenuRow
+              title="Key & chord readout"
+              hint="Under the cover"
+              control={<Switch label="Key & chord readout" checked={showSongFacts} onChange={setShowSongFacts} />}
             />
           )}
           {romanizationCount > 0 && showRomanizations && (

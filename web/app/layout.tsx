@@ -27,8 +27,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
       <head>
-        {/* Start the API connection early: the library, artwork and audio all come from it. */}
-        <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"} crossOrigin="anonymous" />
+        {/* Start the API connection early when it lives on another origin (same-origin needs none). */}
+        {process.env.NEXT_PUBLIC_API_URL && (
+          <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_URL} crossOrigin="anonymous" />
+        )}
       </head>
       <body className="min-h-dvh">
         <AppShell>{children}</AppShell>

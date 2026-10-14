@@ -48,10 +48,19 @@ export function useNow(active: boolean) {
   return now;
 }
 
-export function statusLine(job: Job) {
+/** "Download failed (HTTP 403). Retry 1 of 3 in 12s", or null when nothing is waiting. */
+export function retryLine(job: Job, now: number | null) {
+  if (job.state !== "running" || !job.note) return null;
+  if (job.retryAt == null || now === null) return job.note;
+  const left = Math.ceil(job.retryAt - now);
+  return left > 0 ? `${job.note} in ${left}s` : `${job.note}, retrying…`;
+}
+
+export function statusLine(job: Job, now: number | null = null) {
   switch (job.state) {
     case "queued":
-      return "Waiting in queue";
+      if (job.queuePosition == null || job.queuePosition === 0) return "Starting…";
+      return job.queuePosition === 1 ? "Up next" : `Waiting in queue · ${job.queuePosition} ahead`;
     case "done":
       return job.noLyrics ? "Ready, no lyrics found" : "Ready to sing";
     case "cancelled":
@@ -59,6 +68,8 @@ export function statusLine(job: Job) {
     case "failed":
       return job.error ?? "Something went wrong";
     case "running": {
+      const retry = retryLine(job, now);
+      if (retry) return retry;
       const active = job.steps.find((s) => s.status === "active");
       if (!active) return "Starting…";
       const pct = job.stepProgress != null ? ` · ${Math.round(job.stepProgress * 100)}%` : "";
@@ -92,6 +103,7 @@ export function JobRow({ job }: { job: Job }) {
   const thumb = jobThumb(job);
   const steps = displaySteps(job);
   const finished = !isActiveJob(job);
+  const now = useNow(job.state === "running" && job.retryAt != null);
 
   return (
     <li className="group/row relative flex items-center gap-3 rounded-[16px] p-2.5 transition-colors duration-150 hover:bg-white/[0.05]">
@@ -115,8 +127,12 @@ export function JobRow({ job }: { job: Job }) {
         <p className={`truncate text-[14px] font-medium ${job.title ? "" : "text-muted"}`}>
           {job.title ?? (finished ? "Unknown song" : "Fetching details…")}
         </p>
-        <p className={`truncate text-[12px] tabular-nums ${job.state === "failed" ? "text-danger" : "text-muted"}`}>
-          {statusLine(job)}
+        <p
+          className={`truncate text-[12px] tabular-nums ${
+            job.state === "failed" ? "text-danger" : retryLine(job, now) ? "text-warning" : "text-muted"
+          }`}
+        >
+          {statusLine(job, now)}
         </p>
         {/* Four segments, one per step; the active one fills with its progress */}
         {!finished && (
@@ -176,11 +192,14 @@ export function JobRow({ job }: { job: Job }) {
 
 export function JobSteps({ job }: { job: Job }) {
   const steps = displaySteps(job);
+  const now = useNow(job.state === "running" && job.retryAt != null);
+  const retry = retryLine(job, now);
   return (
     <ol aria-label="Progress" className="grid">
       {steps.map((step, i) => {
         const label = STEP_LABELS[step.key];
         const isLast = i === steps.length - 1;
+        const live = step.status === "active" ? (retry ?? job.log) : null;
         const detail =
           step.status === "skipped"
             ? "Skipped: no synced lyrics"
@@ -232,6 +251,17 @@ export function JobSteps({ job }: { job: Job }) {
               >
                 {detail}
               </p>
+              {/* What the step is doing right now: a retry countdown, or the latest log line */}
+              {live && (
+                <p
+                  className={`mt-1 line-clamp-2 text-[12px] tabular-nums break-words ${
+                    retry ? "text-warning" : "font-mono text-subtle"
+                  }`}
+                  title={live}
+                >
+                  {live}
+                </p>
+              )}
             </div>
           </li>
         );

@@ -11,6 +11,7 @@
   --color-accent-hover: #ff4560;
   --color-danger: #ff453a;
   --color-success: #30d158;
+  --color-warning: #ffd60a;
 
   --font-sans: var(--font-geist-sans), "Nirmala UI", "Noto Sans Devanagari", "Noto Sans Gurmukhi",
     "Noto Sans Tamil", "Noto Sans Telugu", system-ui, sans-serif;
@@ -262,6 +263,9 @@ body {
   animation: ambient-b 110s linear infinite;
   opacity: 0.5;
   scale: 0.8;
+  /* Scaled down it no longer covers the viewport corners on squarer windows, where its
+     rotating hard edge showed as a seam. Fade it out before the edge instead. */
+  mask-image: radial-gradient(closest-side, #000 65%, transparent 100%);
 }
 
 .ambient-backdrop {

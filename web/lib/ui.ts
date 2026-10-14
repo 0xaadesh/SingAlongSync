@@ -109,6 +109,28 @@ export function setShowChords(show: boolean) {
   }
 }
 
+const SONG_FACTS_KEY = "sas:show-song-facts";
+
+/** Whether the key chip and live chord readout are shown under the cover. */
+export const showSongFactsStore = createStore(true);
+
+export function initShowSongFacts() {
+  try {
+    showSongFactsStore.set(localStorage.getItem(SONG_FACTS_KEY) !== "false");
+  } catch {
+    // Storage unavailable; keep the default
+  }
+}
+
+export function setShowSongFacts(show: boolean) {
+  showSongFactsStore.set(show);
+  try {
+    localStorage.setItem(SONG_FACTS_KEY, String(show));
+  } catch {
+    // Not persisted; still applies for this session
+  }
+}
+
 const VIEW_KEY = "sas:player-view";
 
 export type PlayerView = "lyrics" | "beats";

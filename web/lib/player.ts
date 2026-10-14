@@ -29,6 +29,8 @@ export type PlayerState = {
   karaoke: boolean;
   /** Guide vocal volume in karaoke mode, relative to the main volume (0-1). */
   vocalLevel: number;
+  /** Vocals-only mode: play just the vocal stem. Exclusive with karaoke. */
+  vocalsOnly: boolean;
   /** Seconds the current song's lyrics are shifted by (positive = earlier). */
   lyricsOffset: number;
 };
@@ -46,6 +48,7 @@ export const playerStore = createStore<PlayerState>({
   queue: null,
   karaoke: false,
   vocalLevel: 0,
+  vocalsOnly: false,
   lyricsOffset: 0,
 });
 
@@ -54,6 +57,7 @@ export const usePlayer = () => useStore(playerStore);
 const VOLUME_KEY = "sas:volume";
 const KARAOKE_KEY = "sas:karaoke";
 const VOCAL_LEVEL_KEY = "sas:vocal-level";
+const VOCALS_ONLY_KEY = "sas:vocals-only";
 
 let audio: HTMLAudioElement | null = null;
 /** Second element that plays the vocal stem alongside the instrumental in karaoke mode. */
@@ -178,11 +182,32 @@ function registerMediaSession() {
 }
 
 // ---------------------------------------------------------------------------
-// Karaoke: instrumental on the main element, vocals on a second one kept in sync
+// Karaoke: instrumental on the main element, vocals on a second one kept in sync.
+// Vocals only: the vocal stem on the main element, second one unused.
 // ---------------------------------------------------------------------------
 
 function mainSource(song: Song) {
-  return assetUrl(playerStore.get().karaoke && song.stems ? song.stems.instrumental : song.audio)!;
+  const { karaoke, vocalsOnly } = playerStore.get();
+  if (song.stems && vocalsOnly) return assetUrl(song.stems.vocals)!;
+  if (song.stems && karaoke) return assetUrl(song.stems.instrumental)!;
+  return assetUrl(song.audio)!;
+}
+
+/** Point the main element at the source for the current mode, keeping position and play state. */
+function switchMainSource() {
+  const { song } = playerStore.get();
+  if (!audio || !song) return;
+  const source = mainSource(song);
+  if (audio.src !== source) {
+    const time = audio.currentTime;
+    const wasPlaying = !audio.paused;
+    audio.src = source;
+    // Applied once the new source loads
+    audio.currentTime = time;
+    if (wasPlaying) audio.play().catch(() => {});
+  }
+  setVocalsSource(song);
+  alignVocals();
 }
 
 function vocalsWanted() {
@@ -289,6 +314,7 @@ export const player = {
     patch({
       volume: el.volume,
       karaoke: localStorage.getItem(KARAOKE_KEY) === "true",
+      vocalsOnly: localStorage.getItem(KARAOKE_KEY) !== "true" && localStorage.getItem(VOCALS_ONLY_KEY) === "true",
       vocalLevel: storedLevel >= 0 && storedLevel <= 1 ? storedLevel : 0,
     });
     applyVocalsVolume();
@@ -408,23 +434,20 @@ export const player = {
     if ("mediaSession" in navigator) navigator.mediaSession.metadata = null;
   },
 
-  /** Switch karaoke mode, keeping the playback position and play state. */
+  /** Switch karaoke mode (turns vocals-only off), keeping the playback position and play state. */
   setKaraoke(on: boolean) {
-    patch({ karaoke: on });
+    patch(on ? { karaoke: true, vocalsOnly: false } : { karaoke: false });
     localStorage.setItem(KARAOKE_KEY, String(on));
-    const { song } = playerStore.get();
-    if (!audio || !song) return;
-    const source = mainSource(song);
-    if (audio.src !== source) {
-      const time = audio.currentTime;
-      const wasPlaying = !audio.paused;
-      audio.src = source;
-      // Applied once the new source loads
-      audio.currentTime = time;
-      if (wasPlaying) audio.play().catch(() => {});
-    }
-    setVocalsSource(song);
-    alignVocals();
+    if (on) localStorage.setItem(VOCALS_ONLY_KEY, "false");
+    switchMainSource();
+  },
+
+  /** Switch vocals-only mode (turns karaoke off), keeping the playback position and play state. */
+  setVocalsOnly(on: boolean) {
+    patch(on ? { vocalsOnly: true, karaoke: false } : { vocalsOnly: false });
+    localStorage.setItem(VOCALS_ONLY_KEY, String(on));
+    if (on) localStorage.setItem(KARAOKE_KEY, "false");
+    switchMainSource();
   },
 
   /** Guide vocal volume in karaoke mode (0 = instrumental only). */

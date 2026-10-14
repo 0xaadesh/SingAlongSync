@@ -1,4 +1,8 @@
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+/**
+ * Backend origin. Empty by default: requests go to same-origin paths (/api, /downloads, ...)
+ * and next.config.ts proxies them to the backend, so one tunnel exposes the whole app.
+ */
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
 export type Word = { word: string; start: number; end: number };
 
@@ -75,6 +79,16 @@ export type Job = {
   translationError: string | null;
   /** Finished (or finishing) without synced lyrics. */
   noLyrics: boolean;
+  /** Why a running step is waiting, e.g. "Download failed (HTTP 403). Retry 1 of 3". */
+  note: string | null;
+  /** Seconds until that retry, as of when the server sent this job. */
+  retryIn: number | null;
+  /** Client clock time (seconds) the retry is due; filled in from retryIn on arrival. */
+  retryAt?: number | null;
+  /** Latest line of the processing log while running. */
+  log: string | null;
+  /** Jobs ahead of this one; null unless queued. */
+  queuePosition: number | null;
 };
 
 export class ApiError extends Error {}
@@ -97,7 +111,7 @@ export function artworkUrl(song: Pick<Song, "artwork" | "thumbnail" | "videoId">
  * artwork colours); third-party thumbnails may not, and would fail to load in CORS mode.
  */
 export function imageCors(url: string): "anonymous" | undefined {
-  return url.startsWith(API_URL) ? "anonymous" : undefined;
+  return (API_URL ? url.startsWith(API_URL) : url.startsWith("/")) ? "anonymous" : undefined;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -245,6 +259,10 @@ export function createJob(url: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
+}
+
+export function fetchJobs() {
+  return request<Job[]>("/api/jobs", { cache: "no-store" });
 }
 
 export function cancelJob(videoId: string) {

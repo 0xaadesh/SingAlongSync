@@ -23,7 +23,7 @@ import { libraryStore } from "@/lib/library";
 import { player } from "@/lib/player";
 import { useStore } from "@/lib/store";
 import { addDialogStore, closeAddDialog, trackedJobStore } from "@/lib/ui";
-import { Elapsed, JobRow, JobSteps, isActiveJob, jobThumb, playJob, retryJob } from "./jobs";
+import { Elapsed, JobRow, JobSteps, isActiveJob, jobThumb, playJob, retryJob, statusLine } from "./jobs";
 
 type Phase =
   | { kind: "form" }
@@ -450,7 +450,7 @@ function JobHeader({ job }: { job: Job }) {
         )}
       </div>
       <span className="shrink-0 pr-1 text-[13px] text-subtle">
-        {job.state === "queued" ? "Queued" : <Elapsed job={job} />}
+        {job.state === "queued" ? statusLine(job) : <Elapsed job={job} />}
       </span>
     </div>
   );
