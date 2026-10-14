@@ -1,6 +1,6 @@
 # 🎤 SingAlongSync
 
-**Apple Music Sing-style, word-by-word synced lyrics for any song on YouTube Music**, with its key, chords, BPM and beats. Paste a link, get karaoke.
+**Apple Music Sing-style, word-by-word synced lyrics for any song on YouTube Music**, with separate vocal and instrumental tracks, and the song's key, chords, BPM and beats. Paste a link, get it all.
 
 ![Player with word-by-word lyrics, chords, pronunciation and translation](docs/1.webp)
 
@@ -13,13 +13,9 @@
 
 <video src="https://github.com/user-attachments/assets/1d4e6b07-aa70-422a-8471-a0f9f89d1bb9" controls width="100%"></video>
 
-**Adding a song:** search, pick, and watch each step live.
+_[Watch the web app demo](https://github.com/user-attachments/assets/1d4e6b07-aa70-422a-8471-a0f9f89d1bb9) · [Watch adding a song](https://github.com/user-attachments/assets/41a27458-c6f1-421a-a347-4c5be5f71d45)_
 
-<video src="https://github.com/user-attachments/assets/41a27458-c6f1-421a-a347-4c5be5f71d45" controls width="100%"></video>
-
-_[Watch the web app demo](https://github.com/user-attachments/assets/1d4e6b07-aa70-422a-8471-a0f9f89d1bb9) · [Watch adding a song](https://github.com/user-attachments/assets/41a27458-c6f1-421a-a347-4c5be5f71d45) · [Watch the CLI demo](https://github.com/user-attachments/assets/317f310f-c52e-434c-95ad-9657a1131856)_
-
-It downloads the audio, separates the vocals with **Demucs**, fetches synced lyrics from **LRCLIB** and times every word with **WhisperX**. Use it from the terminal, or through the included Apple Music-style web app.
+It downloads the audio, separates the vocals with **Demucs**, fetches synced lyrics from **LRCLIB** and times every word with **WhisperX**. Non-English lyrics can be translated into English and romanised (shown in English letters) with your own AI provider. Use it from the terminal, or through the included Apple Music-style web app.
 
 > [!IMPORTANT]
 > **SingAlongSync is not a piracy tool, and we don't endorse piracy.**
@@ -32,7 +28,7 @@ It downloads the audio, separates the vocals with **Demucs**, fetches synced lyr
 
 ## ✨ Features
 
-- **Word-by-word lyrics** timed to the millisecond, in English, Hindi, Telugu, Malayalam and more
+- **Word-by-word lyrics** timed to the millisecond, for songs in Latin-letter languages and Indian scripts (Hindi, Tamil, Telugu, Punjabi, Bengali and more), romanised automatically where needed
 - **Karaoke mode** (instrumental with optional guide vocals) and **vocals only**
 - **Key, BPM and chords** detected per song, with chords above the lyrics and a beat view with piano diagrams
 - **Translations and pronunciation** for non-English lyrics, using your own AI provider key
@@ -69,7 +65,7 @@ Output goes to `server/downloads/<video_id>/`, which the web app reads too. Step
 
 - **Add a song:** click **Add song**, then search YouTube Music or paste a link. An album or playlist link lets you pick the tracks to queue.
 - **Play:** `Space` play/pause, `←`/`→` seek 5 s, `M` mute, `K` karaoke mode, `[`/`]` shift lyrics 0.1 s, `/` search, `Esc` close the player.
-- **Player header:** the microphone holds karaoke mode, guide vocals and vocals only. The language button holds translation, pronunciation, chords, the key readout and lyrics timing. The list button shows what plays next.
+- **Player:** switch between **Song** (big cover), **Lyrics** and **Beats**. **Karaoke** holds karaoke mode, guide vocals and vocals only; **Options** holds translation, pronunciation, chords, the key readout and lyrics timing; **Up next** shows what plays next. On desktop they sit top right; on phones and tablets in a bottom bar, with the view switch just above the seek bar.
 - **Fix or add lyrics:** **Find lyrics** (or **Lyrics options > Find different lyrics**) searches LRCLIB, or takes pasted LRC text or an `.lrc` file. The song is re-aligned in about a minute.
 - **AI translation:** in **Settings**, pick OpenAI, Google, Anthropic, Groq, xAI or OpenRouter, paste an API key and choose a model. Or pick **OpenAI-compatible** for a local or self-hosted server (Ollama, LM Studio, vLLM…): enter its URL and model name; the key is optional. New songs get translated automatically; **Translate all** handles songs already in your library. The key is stored in `server/settings.json` (gitignored) and never sent back to the browser.
 
