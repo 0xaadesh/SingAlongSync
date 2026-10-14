@@ -1,6 +1,6 @@
 # 🎤 SingAlongSync
 
-**Apple Music Sing-style, word-by-word synced lyrics for any song on YouTube Music.** Paste a link, get karaoke.
+**Apple Music Sing-style, word-by-word synced lyrics for any song on YouTube Music**, with its key, chords, BPM and beats. Paste a link, get karaoke.
 
 ![Player with word-by-word lyrics, chords, pronunciation and translation](docs/1.webp)
 
