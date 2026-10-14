@@ -71,14 +71,27 @@ def api_key(settings, provider=None):
     return (settings.get("apiKeys") or {}).get(provider or settings.get("provider"))
 
 
+def translation_problem(settings):
+    """Why translation can't run yet, as a sentence for the user, or None when it can."""
+    provider = settings["provider"]
+    name = PROVIDERS.get(provider, provider)
+    if not settings["translationEnabled"]:
+        return "Turn on AI translation in Settings first."
+    if not provider:
+        return "Choose an AI provider in Settings first."
+    if provider == "custom" and not settings.get("baseUrl"):
+        return "Add your server's URL in Settings first."
+    if provider not in KEY_OPTIONAL and not api_key(settings):
+        return f"Add an API key for {name} in Settings first."
+    if not settings["model"]:
+        # Switching providers clears the model, so this is the usual one
+        return f"AI translation is on but has no model. Pick one for {name} in Settings."
+    return None
+
+
 def translation_ready(settings):
     """Translation runs only when switched on and fully configured."""
-    provider = settings["provider"]
-    if not (settings["translationEnabled"] and provider and settings["model"]):
-        return False
-    if provider == "custom" and not settings.get("baseUrl"):
-        return False
-    return provider in KEY_OPTIONAL or bool(api_key(settings))
+    return translation_problem(settings) is None
 
 
 def youtube_cookie_count(path):

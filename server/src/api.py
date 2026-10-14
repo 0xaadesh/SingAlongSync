@@ -345,8 +345,8 @@ def translation_status():
 @app.post("/api/translations/backfill")
 def translate_library():
     """Queue every song that has no translations yet."""
-    if not settings_store.translation_ready(settings_store.load()):
-        raise HTTPException(status_code=400, detail="Turn on AI translation and finish setting it up first.")
+    if problem := settings_store.translation_problem(settings_store.load()):
+        raise HTTPException(status_code=400, detail=problem)
     return {"queued": translations.enqueue(untranslated_songs())}
 
 
@@ -356,8 +356,8 @@ def translate_one(video_id: str):
     song_dir = DOWNLOADS_DIR / video_id
     if not is_valid_video_id(video_id) or not (song_dir / "karaoke.json").exists():
         raise HTTPException(status_code=404, detail="Song not found")
-    if not settings_store.translation_ready(settings_store.load()):
-        raise HTTPException(status_code=400, detail="Turn on AI translation and finish setting it up first.")
+    if problem := settings_store.translation_problem(settings_store.load()):
+        raise HTTPException(status_code=400, detail=problem)
     (song_dir / "translations.json").unlink(missing_ok=True)
     translations.enqueue([video_id])
     return {"ok": True}

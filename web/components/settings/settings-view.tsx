@@ -183,10 +183,15 @@ function TranslationCard({ settings, save }: { settings: Settings; save: Save })
           <p
             id={hintId}
             aria-live="polite"
-            className={`mt-0.5 text-[13px] text-pretty transition-colors duration-150 ${nudge && missing ? "text-accent" : "text-muted"}`}
+            className={`mt-0.5 text-[13px] text-pretty transition-colors duration-150 ${
+              missing && (nudge || settings.translationEnabled) ? "text-accent" : "text-muted"
+            }`}
           >
             {settings.ready
               ? `On · ${providerName} · ${settings.model}`
+              : settings.translationEnabled && missing
+                ? // On but incomplete (switching providers clears the model): nothing gets translated
+                  `On, but paused: ${MISSING_LABEL[missing]} below. Songs aren't translated until then.`
               : configured
                 ? "Ready to switch on. English appears under every non-English line, including romanised lyrics."
                 : nudge && missing
