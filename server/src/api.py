@@ -196,7 +196,9 @@ async def stream_jobs(request: Request):
     return StreamingResponse(
         events(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        # no-transform stops proxies (the Next.js rewrite included) from gzipping, and so
+        # buffering, the stream; without it the UI never sees updates after "queued"
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
 
 

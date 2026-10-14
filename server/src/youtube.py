@@ -105,6 +105,7 @@ def download_audio(url, work_dir, video_id, on_progress=None, on_metadata=None, 
     Download best audio as audio.mp3 (plus thumbnail) into work_dir and return track metadata.
     on_metadata, if given, receives the metadata before the download starts.
     on_progress, if given, receives the download fraction (0-1).
+    on_retry, if given, receives (message, delay_seconds) before each retry wait.
     """
     def progress_hook(d):
         if on_progress and d.get("status") == "downloading":
@@ -137,7 +138,7 @@ def download_audio(url, work_dir, video_id, on_progress=None, on_metadata=None, 
     for attempt, delay in enumerate((0, *DOWNLOAD_RETRY_DELAYS)):
         if delay:
             if on_retry:
-                on_retry(f"Download failed ({last_error}). Retry {attempt} of {len(DOWNLOAD_RETRY_DELAYS)} in {delay}s…")
+                on_retry(f"Download failed ({last_error}). Retry {attempt} of {len(DOWNLOAD_RETRY_DELAYS)}", delay)
             time.sleep(delay)
         try:
             with YoutubeDL(ydl_opts) as ydl:

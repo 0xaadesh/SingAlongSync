@@ -27,12 +27,18 @@ def clean_title(title):
     return TITLE_NOISE.sub("", title or "").strip() or title
 
 
-def _search(params, log):
-    """GET /api/search with retries on rate limits, server errors and network failures."""
+def _search(params, log, on_retry=None):
+    """
+    GET /api/search with retries on rate limits, server errors and network failures.
+    on_retry, if given, receives (message, delay_seconds) before each retry wait.
+    """
     last_error = None
     for attempt, delay in enumerate((0, *RETRY_DELAYS)):
         if delay:
-            log(f"LRCLIB busy ({last_error}); retrying in {delay}s")
+            if on_retry:
+                on_retry(f"LRCLIB busy ({last_error}). Retry {attempt} of {len(RETRY_DELAYS)}", delay)
+            else:
+                log(f"LRCLIB busy ({last_error}); retrying in {delay}s")
             time.sleep(delay)
         try:
             res = requests.get(LRCLIB_SEARCH_URL, params=params, headers=LRCLIB_HEADERS, timeout=15)
@@ -48,7 +54,7 @@ def _search(params, log):
     raise LyricsServiceError(f"LRCLIB is unavailable right now ({last_error}). Try again in a minute.")
 
 
-def search_synced_lyrics(title, artists, duration, log=print):
+def search_synced_lyrics(title, artists, duration, log=print, on_retry=None):
     """
     Search LRCLIB and return (synced_lyrics, reason); synced_lyrics is None when
     nothing usable was found and reason explains why.
@@ -68,7 +74,7 @@ def search_synced_lyrics(title, artists, duration, log=print):
 
     reason = "no_results"
     for params in strategies:
-        results = _search(params, log)
+        results = _search(params, log, on_retry)
         synced = [r for r in results if r.get("syncedLyrics")]
         close = [r for r in synced if abs((r.get("duration") or 0) - duration) <= MAX_DURATION_DRIFT]
         query = ", ".join(f"{k}={v!r}" for k, v in params.items())

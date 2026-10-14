@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 import json
+import time
 
 import torch
 import whisperx
@@ -65,8 +66,17 @@ class KaraokePipeline:
 
     def save_status(self, updates):
         status = self.get_status()
+        # A retry note only lasts until the pipeline reports anything else
+        if "note" not in updates:
+            status.pop("note", None)
+            status.pop("retry_at", None)
         status.update(updates)
         write_json_atomic(self.status_path, status)
+
+    def report_retry(self, message, delay):
+        """Tell the web UI a step is waiting to retry, and when."""
+        console.print(f"[yellow]  {message} in {delay}s…[/yellow]")
+        self.save_status({"note": message, "retry_at": time.time() + delay})
 
     def report_progress(self, fraction):
         """Persist step progress (0-1) whenever the whole percentage changes."""
@@ -148,7 +158,7 @@ class KaraokePipeline:
                     self.work_dir,
                     self.video_id,
                     on_progress=self.report_progress,
-                    on_retry=lambda message: console.print(f"[yellow]  {message}[/yellow]"),
+                    on_retry=self.report_retry,
                     # Written before the audio arrives so the web UI can show the title early
                     on_metadata=self._write_metadata,
                 )
@@ -193,6 +203,7 @@ class KaraokePipeline:
                     meta.get("artists") or [meta["artist"]],
                     meta["duration"],
                     log=lambda message: console.print(f"[dim]  {message}[/dim]"),
+                    on_retry=self.report_retry,
                 )
             except LyricsServiceError as e:
                 # LRCLIB being down: carry on without lyrics; they can be fetched later
