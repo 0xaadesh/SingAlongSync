@@ -73,7 +73,7 @@ Output goes to `server/downloads/<video_id>/`, which the web app reads too. Step
 - **Fix or add lyrics:** **Find lyrics** (or **Lyrics options > Find different lyrics**) searches LRCLIB, or takes pasted LRC text or an `.lrc` file. The song is re-aligned in about a minute.
 - **AI translation:** in **Settings**, pick OpenAI, Google, Anthropic, Groq, xAI or OpenRouter, paste an API key and choose a model. New songs get translated automatically; **Translate all** handles songs already in your library. The key is stored in `server/settings.json` (gitignored) and never sent back to the browser.
 
-**"Sign in to confirm you're not a bot"?** YouTube does this after many downloads from one IP. In **Settings > YouTube access**, pick a browser you're signed in to YouTube with (Firefox is most reliable on Windows; Chrome and Edge lock their cookies while open) or point to an exported `cookies.txt`, then press **Test**.
+**"Sign in to confirm you're not a bot"?** YouTube does this after many downloads from one IP. In **Settings > YouTube access**, pick a browser you're signed in to YouTube with (Firefox is most reliable on Windows; Chrome and Edge lock their cookies while open) or choose or paste an exported `cookies.txt`, then press **Test**.
 
 <details>
 <summary><b>Configuration (<code>server/.env</code>)</b></summary>
@@ -274,8 +274,6 @@ These models run in `server/src/analysis/`. Their model code is vendored (each f
 | Chords (model) | [**BTC**](https://github.com/jayg996/BTC-ISMIR19), Bi-directional Transformer for Chord Recognition | Jonggwon Park, Kyoyun Choi, Sungwook Jeon, Dokyun Kim, Jonghun Park. *A Bi-directional Transformer for Musical Chord Recognition.* ISMIR 2019. [arXiv:1907.02698](https://arxiv.org/abs/1907.02698) | MIT |
 | Chords (improved weights & implementation) | [**ChordMini**](https://github.com/ptnghia-j/ChordMini) | Nghia Phan, Rong Jin, Gang Liu, Xiao Dong. *Enhancing Automatic Chord Recognition via Pseudo-Labeling and Knowledge Distillation.* 2026. [arXiv:2602.19778](https://arxiv.org/abs/2602.19778) | MIT |
 | Beats & bars | [**Beat This!**](https://github.com/CPJKU/beat_this) (CPJKU, JKU Linz) | Francesco Foscarin, Jan Schlüter, Gerhard Widmer. *Beat this! Accurate beat tracking without DBN postprocessing.* ISMIR 2024. | MIT |
-
-The key decision rule (using detected chords to settle major vs minor) and the chord display are SingAlongSync's own; any mistakes in them are ours, not the models' authors'.
 
 ### Audio, lyrics and metadata
 
