@@ -127,8 +127,10 @@ export function BeatView({
   })();
 
   return (
-    <div className="flex h-full flex-col justify-center gap-4 py-3 sm:gap-6 sm:py-6">
-      <div>
+    // Centred while it fits; when it doesn't, it starts at the top and scrolls instead of
+    // spilling over the title above and the controls below
+    <div className="flex h-full flex-col gap-4 overflow-y-auto py-3 [justify-content:safe_center] sm:gap-6 sm:py-6">
+      <div className="shrink-0">
         <div className="mb-2 flex items-baseline justify-between px-1 text-[12px] font-medium text-white/50 tabular-nums">
           <span>
             {analysis.bpm ? `${Math.round(analysis.bpm)} BPM` : ""} · Key {analysis.key}
@@ -143,7 +145,7 @@ export function BeatView({
       </div>
 
       {/* Phones: the script switch sits under the line instead of squeezing it */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
         <p className="min-h-[1.4em] min-w-0 flex-1 px-1 text-[clamp(1.25rem,2.2vw,1.75rem)] leading-snug font-bold text-white/90 text-balance">
           {line ?? <span className="text-white/30">♪</span>}
         </p>
@@ -170,10 +172,10 @@ export function BeatView({
         )}
       </div>
 
-      {/* Phones show the current and next chord side by side; wider screens all four */}
-      <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:gap-4">
+      {/* Below desktop width: the current and next chord side by side; desktop: all four */}
+      <div className="grid shrink-0 grid-cols-2 gap-3 sm:gap-4 lg:flex lg:flex-wrap">
         {upcoming.map((u, i) => (
-          <ChordCard key={`${u.chord}-${i}`} chord={u.chord} current={u.current} className={i >= 2 ? "max-sm:hidden" : ""} />
+          <ChordCard key={`${u.chord}-${i}`} chord={u.chord} current={u.current} className={i >= 2 ? "max-lg:hidden" : ""} />
         ))}
       </div>
     </div>
@@ -359,7 +361,7 @@ function ChordCard({ chord, current, className = "" }: { chord: string; current:
         height={KEY_H}
         role="img"
         aria-label={`Piano: ${chord}`}
-        className="h-auto w-full max-w-full sm:w-auto"
+        className="h-auto w-full max-w-[280px] lg:w-auto"
       >
         {[0, 1].map((octave) =>
           WHITE_KEYS.map((semitone, i) => {
