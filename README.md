@@ -26,9 +26,9 @@ Give it a YouTube Music link (or search for a song) and it downloads the audio, 
 ### Web app
 - **Library** with **Songs, Albums, Artists and Genres** sections, detail pages for each album, artist and genre, and one search box that filters whichever page you're on.
 - **Full-screen player** with word-by-word lyric fill, a cascading scroll, instrumental-break dots, click-to-seek lines, manual lyric browsing, and a slowly turning backdrop built from the cover art.
-- **Key and chords**: the player shows the song's key (with a spinner while it's being detected), the chord playing now and the next one, and chord names above the exact words where they change, like a lead sheet. Toggle chords from the lyrics menu.
+- **Key, BPM and chords**: the player shows the song's key and BPM under the cover (with a spinner while they're being detected), the chord playing now and the next one, and chord names above the exact words where they change, like a lead sheet. Toggle the chords over the lyrics and the key and chord readout separately from the lyrics menu.
 - **Beat view** (switch in the player header): a scrolling strip of beats grouped into bars with the chord changes, following playback (click a beat to jump), the lyric line being sung, and piano diagrams for the current and next chords. Beats and bars come from **beat_this** (CPJKU).
-- **Karaoke mode** plays the instrumental stem instead of the full mix, with an optional guide-vocals slider.
+- **Karaoke mode** plays the instrumental stem instead of the full mix, with an optional guide-vocals slider. **Vocals only** plays just the singer.
 - **English translations** and **pronunciation** (non-Latin-script lines in English letters) under each line, toggled from the player.
 - **Lyrics timing nudge** per song, for when lines feel early or late; saved on the server.
 - **Up next** queue view, a **Recently played** row, a persistent mini player, queue-aware next/previous (album, artist or whole library), keyboard shortcuts and OS media keys.
@@ -40,14 +40,14 @@ Give it a YouTube Music link (or search for a song) and it downloads the audio, 
 
 ## 📺 Demonstration Videos
 
-Watch the demonstration videos below to see **SingAlongSync**'s CLI processing and Web UI player in action. (Recorded with an earlier version of the web UI.)
+Watch the demonstration videos below to see **SingAlongSync**'s CLI processing and Web UI player in action.
 
 ### 🌐 1. Web UI Apple Music Karaoke Player
 Shows the song library, color-extracted backdrops, and fluid word-by-word sweeping highlights:
 
-<video src="https://github.com/user-attachments/assets/1bc74b87-c34e-4b5f-b07e-c3dec88071e0" controls width="100%"></video>
+<video src="https://github.com/user-attachments/assets/1d4e6b07-aa70-422a-8471-a0f9f89d1bb9" controls width="100%"></video>
 
-_Direct link: [Watch Web UI Demo directly in your browser](https://github.com/user-attachments/assets/1bc74b87-c34e-4b5f-b07e-c3dec88071e0)_
+_Direct link: [Watch Web UI Demo directly in your browser](https://github.com/user-attachments/assets/1d4e6b07-aa70-422a-8471-a0f9f89d1bb9)_
 
 ### 💻 2. CLI / TUI Processing Stage
 Shows how you process songs in the terminal using the rich TUI:
