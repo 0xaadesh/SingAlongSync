@@ -33,6 +33,8 @@ export type PlayerState = {
   vocalsOnly: boolean;
   /** Seconds the current song's lyrics are shifted by (positive = earlier). */
   lyricsOffset: number;
+  /** Semitones the current song is transposed by; chords and key follow. */
+  pitch: number;
 };
 
 export const playerStore = createStore<PlayerState>({
@@ -50,6 +52,7 @@ export const playerStore = createStore<PlayerState>({
   vocalLevel: 0,
   vocalsOnly: false,
   lyricsOffset: 0,
+  pitch: 0,
 });
 
 export const usePlayer = () => useStore(playerStore);
@@ -58,6 +61,10 @@ const VOLUME_KEY = "sas:volume";
 const KARAOKE_KEY = "sas:karaoke";
 const VOCAL_LEVEL_KEY = "sas:vocal-level";
 const VOCALS_ONLY_KEY = "sas:vocals-only";
+const PITCH_KEY = "sas:pitch";
+
+/** Furthest the pitch can be shifted either way, in semitones. */
+export const PITCH_RANGE = 6;
 
 let audio: HTMLAudioElement | null = null;
 /** Second element that plays the vocal stem alongside the instrumental in karaoke mode. */
@@ -266,6 +273,57 @@ function correctDrift() {
 }
 
 // ---------------------------------------------------------------------------
+// Pitch: both elements routed through a Web Audio pitch shifter. The graph is
+// built the first time a shift is used; from then on the elements only sound
+// through it (it passes audio straight through at 0).
+// ---------------------------------------------------------------------------
+
+let audioContext: AudioContext | null = null;
+let shifter: AudioWorkletNode | null = null;
+let pitchGraph: Promise<void> | null = null;
+
+/** Per-song shifts, keyed by video id; songs at 0 aren't stored. */
+function storedPitches(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(PITCH_KEY) ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function ensurePitchGraph() {
+  if (pitchGraph || !audio || !vocals) return;
+  const main = audio;
+  const guide = vocals;
+  const ctx = new AudioContext();
+  pitchGraph = ctx.audioWorklet
+    .addModule("/pitch-shifter.js")
+    .then(() => {
+      shifter = new AudioWorkletNode(ctx, "pitch-shifter", {
+        outputChannelCount: [2],
+        channelCount: 2,
+        channelCountMode: "explicit",
+      });
+      ctx.createMediaElementSource(main).connect(shifter);
+      ctx.createMediaElementSource(guide).connect(shifter);
+      shifter.connect(ctx.destination);
+      audioContext = ctx;
+      applyPitch();
+      if (!main.paused) ctx.resume().catch(() => {});
+    })
+    .catch(() => {
+      pitchGraph = null;
+      shifter = null;
+      ctx.close().catch(() => {});
+      toast({ title: "Couldn't change the pitch in this browser", tone: "error" });
+    });
+}
+
+function applyPitch() {
+  shifter?.port.postMessage({ ratio: 2 ** (playerStore.get().pitch / 12) });
+}
+
+// ---------------------------------------------------------------------------
 // Loading
 // ---------------------------------------------------------------------------
 
@@ -273,7 +331,10 @@ let offsetSaveTimer = 0;
 
 function loadSong(song: Song, autoplay: boolean) {
   if (!audio) return;
-  patch({ song, detail: null, detailError: null, duration: song.duration, buffering: autoplay, lyricsOffset: song.lyricsOffset ?? 0 });
+  const pitch = storedPitches()[song.videoId] ?? 0;
+  patch({ song, detail: null, detailError: null, duration: song.duration, buffering: autoplay, lyricsOffset: song.lyricsOffset ?? 0, pitch });
+  if (pitch !== 0) ensurePitchGraph();
+  applyPitch();
   audio.src = mainSource(song);
   setVocalsSource(song);
   if (autoplay) {
@@ -328,6 +389,7 @@ export const player = {
     const offs = [
       on("play", () => {
         patch({ playing: true });
+        audioContext?.resume().catch(() => {});
         syncLoop();
         alignVocals();
         updatePositionState();
@@ -453,10 +515,26 @@ export const player = {
   /** Guide vocal volume in karaoke mode (0 = instrumental only). */
   setVocalLevel(level: number) {
     const vocalLevel = Math.max(0, Math.min(1, level));
+    const wasWanted = vocalsWanted();
     patch({ vocalLevel });
     localStorage.setItem(VOCAL_LEVEL_KEY, String(vocalLevel));
     applyVocalsVolume();
-    alignVocals();
+    // Re-seeking the vocals on every slider step makes them stutter; only start or stop them
+    if (vocalsWanted() !== wasWanted) alignVocals();
+  },
+
+  /** Transpose the current song by whole semitones (0 = original). Remembered per song. */
+  setPitch(semitones: number) {
+    const { song } = playerStore.get();
+    if (!song) return;
+    const pitch = Math.round(Math.max(-PITCH_RANGE, Math.min(PITCH_RANGE, semitones)));
+    patch({ pitch });
+    const stored = storedPitches();
+    if (pitch === 0) delete stored[song.videoId];
+    else stored[song.videoId] = pitch;
+    localStorage.setItem(PITCH_KEY, JSON.stringify(stored));
+    if (pitch !== 0) ensurePitchGraph();
+    applyPitch();
   },
 
   /** Shift the current song's lyrics (seconds, positive = earlier). Saved after a short pause. */

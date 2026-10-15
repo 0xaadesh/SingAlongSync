@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { artworkUrl, imageCors, translateSong, type SongDetail } from "@/lib/api";
 import { formatTime } from "@/lib/format";
 import { libraryStore } from "@/lib/library";
-import { player, queuePosition, usePlayer } from "@/lib/player";
+import { PITCH_RANGE, player, queuePosition, usePlayer } from "@/lib/player";
 import { useStore } from "@/lib/store";
 import { toast } from "@/lib/toast";
 import {
@@ -123,8 +123,9 @@ function MenuRow({ title, hint, control }: { title: string; hint?: string; contr
 // ---------------------------------------------------------------------------
 
 export function KaraokeMenu({ detail, variant = "header" }: { detail: SongDetail; variant?: MenuVariant }) {
-  const { karaoke, vocalLevel, vocalsOnly } = usePlayer();
+  const { karaoke, vocalLevel, vocalsOnly, pitch } = usePlayer();
   const available = !!detail.stems;
+  const pitchLabel = pitch === 0 ? "Original" : `${pitch > 0 ? "+" : ""}${pitch}`;
 
   return (
     <Popover
@@ -136,7 +137,7 @@ export function KaraokeMenu({ detail, variant = "header" }: { detail: SongDetail
           variant={variant}
           label="Karaoke"
           barLabel="Karaoke"
-          active={(karaoke || vocalsOnly) && available}
+          active={((karaoke || vocalsOnly) && available) || pitch !== 0}
           icon={<Mic2 size={variant === "bar" ? 20 : 18} strokeWidth={2} />}
           {...props}
         />
@@ -177,6 +178,54 @@ export function KaraokeMenu({ detail, variant = "header" }: { detail: SongDetail
               control={<Switch label="Vocals only" checked={vocalsOnly} onChange={(on) => player.setVocalsOnly(on)} />}
             />
           )}
+
+          <div className="mx-3 my-1 h-px bg-white/[0.07]" />
+
+          <div className="px-3 pt-2 pb-2.5">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-medium">Pitch</p>
+                <p className="text-[12px] text-subtle">
+                  {detail.analysis ? `Key ${detail.analysis.key} · chords follow` : "Move the song to suit your voice"}
+                </p>
+              </div>
+              {pitch !== 0 && (
+                <button
+                  type="button"
+                  aria-label="Reset pitch"
+                  title="Reset"
+                  onClick={() => player.setPitch(0)}
+                  className="pressable grid size-8 place-items-center rounded-full text-subtle hover:bg-white/10 hover:text-fg"
+                >
+                  <RotateCcw size={14} strokeWidth={2} />
+                </button>
+              )}
+            </div>
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Lower by a semitone"
+                disabled={pitch <= -PITCH_RANGE}
+                onClick={() => player.setPitch(pitch - 1)}
+                className="pressable flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-white/10 text-[13px] font-medium hover:bg-white/15 disabled:opacity-40"
+              >
+                <Minus size={14} strokeWidth={2.25} /> Lower
+              </button>
+              <span className="w-16 text-center text-[13px] font-semibold tabular-nums" aria-live="polite">
+                {pitchLabel}
+              </span>
+              <button
+                type="button"
+                aria-label="Raise by a semitone"
+                disabled={pitch >= PITCH_RANGE}
+                onClick={() => player.setPitch(pitch + 1)}
+                className="pressable flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-white/10 text-[13px] font-medium hover:bg-white/15 disabled:opacity-40"
+              >
+                <Plus size={14} strokeWidth={2.25} /> Higher
+              </button>
+            </div>
+            <p className="mt-2 text-[12px] text-subtle">In semitones, saved for this song.</p>
+          </div>
         </>
       )}
     </Popover>

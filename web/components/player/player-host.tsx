@@ -84,9 +84,9 @@ export function PlayerHost() {
 
   return (
     <>
-      <audio ref={audioRef} preload="auto" hidden />
+      <audio ref={audioRef} preload="auto" crossOrigin="anonymous" hidden />
       {/* Guide vocals for karaoke mode, kept in sync with the main element */}
-      <audio ref={vocalsRef} preload="auto" hidden />
+      <audio ref={vocalsRef} preload="auto" crossOrigin="anonymous" hidden />
     </>
   );
 }

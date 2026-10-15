@@ -1,8 +1,9 @@
 "use client";
 
 import { ChevronDown, RotateCw, Search, TextQuote } from "lucide-react";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { analyzeSong, artworkUrl, imageCors, type Job, type SongDetail } from "@/lib/api";
+import { transposeDetail } from "@/lib/chords";
 import { useJobs } from "@/lib/jobs";
 import { player, usePlayer } from "@/lib/player";
 import { useStore } from "@/lib/store";
@@ -44,7 +45,9 @@ const DISMISS_VELOCITY = 0.11; // px per ms: a quick flick is enough
 
 /** Full-screen "Now Playing" view: the song, its synced lyrics, or its beats. Slides up over the library. */
 export function PlayerSheet() {
-  const { song, detail, detailError, playing, sheetOpen, lyricsOffset } = usePlayer();
+  const { song, detail: sourceDetail, detailError, playing, sheetOpen, lyricsOffset, pitch } = usePlayer();
+  // Key and chords follow the pitch shift everywhere in the sheet
+  const detail = useMemo(() => transposeDetail(sourceDetail, pitch), [sourceDetail, pitch]);
   const showTranslations = useStore(showTranslationsStore);
   const showRomanizations = useStore(showRomanizationsStore);
   const romanizedFirst = useStore(romanizedFirstStore);
